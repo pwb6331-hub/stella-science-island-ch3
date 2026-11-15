@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STELLA 國中7上自然第3章 3D互動教學微縮群島｜生物的運輸與防禦</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js & OrbitControls & Canvas Confetti -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Google Fonts Inter & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      user-select: none;
+      background-color: #060b18;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 移軸微縮景深邊緣微暗角 */
+    .tilt-shift-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      box-shadow: inset 0 80px 100px -20px rgba(0, 0, 0, 0.55),
+                  inset 0 -80px 100px -20px rgba(0, 0, 0, 0.55);
+      z-index: 5;
+    }
+
+    /* 毛玻璃擬態 */
+    .glassmorphism {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .glass-tab-active {
+      background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+      color: #ffffff !important;
+      font-weight: bold;
+    }
+
+    /* 自定義捲軸 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(16, 185, 129, 0.6); }
+
+    /* 浮空提示泡泡 */
+    .clay-bubble {
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5), inset 0 2px 2px rgba(255,255,255,0.4);
+    }
+
+    /* 動態微波 */
+    @keyframes pulseSlow {
+      0%, 100% { transform: scale(1); opacity: 0.92; }
+      50% { transform: scale(1.05); opacity: 1; }
+    }
+    .pulse-animation {
+      animation: pulseSlow 3s infinite ease-in-out;
+    }
+
+    /* 3D 浮空標籤螢幕防重疊投影 */
+    .billboard-pin {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform 0.15s ease-out, opacity 0.2s ease;
+      z-index: 10;
+      white-space: nowrap;
+    }
+    .billboard-pin:hover {
+      transform: translate(-50%, -108%) scale(1.06);
+      z-index: 15;
+    }
+
+    /* Pan & Zoom 燈箱畫布 */
+    #lightbox-img {
+      cursor: grab;
+      user-select: none;
+      -webkit-user-drag: none;
+      transition: transform 0.08s ease-out;
+      transform-origin: center center;
+    }
+    #lightbox-img:active {
+      cursor: grabbing;
+    }
+  </style>
+</head>
+
+<body class="relative w-screen h-screen overflow-hidden text-slate-100">
+
+  <!-- 3D WebGL 畫布容器 -->
+  <div id="webgl-container" class="absolute inset-0 z-0"></div>
+
+  <!-- 移軸與微暗角遮罩 -->
+  <div class="tilt-shift-overlay"></div>
+
+  <!-- 3D 浮空標籤 DOM 容器 -->
+  <div id="pins-container" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- 頂部導航控制列 -->
+  <header class="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+    <!-- 標題與 STELLA Badge -->
+    <div class="flex items-center gap-3 bg-slate-900/85 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-xl pointer-events-auto">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
+        <i class="fa-solid fa-heart-pulse text-xl"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-400/30">STELLA 7上自然</span>
+          <span class="text-xs text-slate-400">第3章：生物的運輸與防禦</span>
+        </div>
+        <h1 class="text-base sm:text-lg font-bold tracking-wide text-white drop-shadow">3D 互動教學微縮群島</h1>
+      </div>
+    </div>
+
+    <!-- 快速島嶼巡航按鈕 -->
+    <nav class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/85 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-xl pointer-events-auto overflow-x-auto max-w-full">
+      <button onclick="zoomToIsland('home')" id="nav-btn-home" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-emerald-400 flex items-center gap-1.5">
+        <i class="fa-solid fa-solar-system"></i><span class="hidden md:inline">全景導覽</span>
+      </button>
+      <button onclick="zoomToIsland('3-1')" id="nav-btn-3-1" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>3-1 植物維管束
+      </button>
+      <button onclick="zoomToIsland('3-2')" id="nav-btn-3-2" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>3-2 蒸散與養分流
+      </button>
+      <button onclick="zoomToIsland('3-3')" id="nav-btn-3-3" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>3-3 心臟與血液循環
+      </button>
+      <button onclick="zoomToIsland('3-4')" id="nav-btn-3-4" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>3-4 淋巴與免疫防禦
+      </button>
+    </nav>
+
+    <!-- 右上快捷工具 -->
+    <div class="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 pointer-events-auto">
+      <button onclick="togglePinVisibility()" id="btn-pin" title="顯示/隱藏浮空標籤" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-teal-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-tags"></i>
+      </button>
+      <button onclick="toggleAudio()" id="btn-audio" title="開啟/關閉音效與語音" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-rose-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-volume-high"></i>
+      </button>
+      <button onclick="toggleHelpModal()" title="操作指南與章節切換" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-purple-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 左下角皮克敏導師即時語音對話卡 -->
+  <div id="mentor-card" class="fixed bottom-6 left-6 z-20 max-w-sm glassmorphism rounded-2xl p-4 shadow-2xl border border-white/15 transition-all duration-300 translate-y-32 opacity-0 pointer-events-none">
+    <div class="flex items-start gap-3">
+      <div id="mentor-avatar" class="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-2xl shadow-lg flex-shrink-0">
+        🌱
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center justify-between">
+          <h3 id="mentor-name" class="font-bold text-sm text-white">探險隊長小芹</h3>
+          <span id="mentor-role" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-400/30">駐島導師</span>
+        </div>
+        <p id="mentor-speech" class="text-xs text-slate-300 mt-1 leading-relaxed">
+          歡迎來到第3章！點選島上的微縮實驗器材、心臟軌道或皮克敏小精靈，一起探索生物運輸奧秘！
+        </p>
+      </div>
+      <button onclick="closeMentorCard()" class="text-slate-400 hover:text-white p-1">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+    <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between">
+      <button onclick="speakCurrentMentor()" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 font-semibold">
+        <i class="fa-solid fa-volume-high"></i> 聽名師解說
+      </button>
+      <button onclick="openCurrentDrawerTab()" class="text-xs px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1">
+        查看章節筆記 <i class="fa-solid fa-arrow-right"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- 右側 5-Tab 學習與實驗抽屜 (Slide-out Drawer) -->
+  <aside id="drawer" class="fixed top-0 right-0 h-full w-full sm:w-[540px] md:w-[620px] bg-slate-950/95 backdrop-blur-2xl border-l border-white/15 shadow-2xl z-30 transition-transform duration-300 translate-x-full flex flex-col">
+    <!-- 抽屜頂部標頭 -->
+    <div class="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-slate-900/60">
+      <div class="flex items-center gap-3">
+        <div id="drawer-badge-icon" class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+          3-1
+        </div>
+        <div>
+          <span id="drawer-unit-badge" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-400/30">植物體內物質的運輸構造</span>
+          <h2 id="drawer-unit-title" class="text-base sm:text-lg font-bold text-white">維管束與年輪奧秘</h2>
+        </div>
+      </div>
+      <button onclick="closeDrawer()" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- 5-Tab 導航列 -->
+    <div class="flex border-b border-white/10 bg-slate-900/40 px-2 sm:px-4 text-xs sm:text-sm font-semibold overflow-x-auto">
+      <button onclick="switchTab('notes')" id="tab-btn-notes" class="px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-book-open"></i> 課程重點
+      </button>
+      <button onclick="switchTab('lab')" id="tab-btn-lab" class="px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-flask-vial"></i> 核心實驗
+      </button>
+      <button onclick="switchTab('quiz')" id="tab-btn-quiz" class="px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-graduation-cap"></i> 會考評量
+      </button>
+      <button onclick="switchTab('video')" id="tab-btn-video" class="px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-circle-play"></i> 教學影音
+      </button>
+      <button onclick="switchTab('stella')" id="tab-btn-stella" class="px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-rocket"></i> STELLA探究
+      </button>
+    </div>
+
+    <!-- 抽屜內容主視窗 -->
+    <div id="drawer-body" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 text-slate-200">
+      <!-- 內容將由 JavaScript 動態填入 -->
+    </div>
+  </aside>
+
+  <!-- 全幅 Pan & Zoom 圖解畫廊燈箱 -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl hidden flex flex-col">
+    <!-- 燈箱頂部列 -->
+    <div class="p-3 sm:p-4 border-b border-white/10 flex items-center justify-between bg-slate-900/80">
+      <div class="flex items-center gap-3">
+        <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+        <h3 id="lightbox-title" class="font-bold text-sm sm:text-base text-white">圖解細部觀察</h3>
+        <span id="lightbox-zoom-level" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">100%</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="zoomLightbox(0.25)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center">
+          <i class="fa-solid fa-magnifying-glass-plus"></i>
+        </button>
+        <button onclick="zoomLightbox(-0.25)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center">
+          <i class="fa-solid fa-magnifying-glass-minus"></i>
+        </button>
+        <button onclick="resetLightboxZoom()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center" title="重設縮放">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+        <button onclick="closeLightbox()" class="w-8 h-8 rounded-lg bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center ml-2">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+    </div>
+    <!-- 燈箱圖片畫布 -->
+    <div id="lightbox-canvas" class="flex-1 overflow-hidden relative flex items-center justify-center p-4">
+      <img id="lightbox-img" src="" alt="教學圖解" class="max-h-full max-w-full object-contain pointer-events-auto">
+    </div>
+    <!-- 燈箱底部快速切換列 -->
+    <div id="lightbox-thumbs" class="p-3 border-t border-white/10 bg-slate-900/80 flex items-center justify-center gap-2 overflow-x-auto">
+      <!-- 動態生成縮圖 -->
+    </div>
+  </div>
+
+  <!-- 操作說明 Modal -->
+  <div id="help-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="max-w-md w-full glassmorphism rounded-3xl p-6 border border-white/20 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <h3 class="font-bold text-lg text-white flex items-center gap-2">
+          <i class="fa-solid fa-compass text-emerald-400"></i> 操作指南與章節切換
+        </h3>
+        <button onclick="toggleHelpModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed">
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-mouse text-emerald-400 mt-1"></i>
+          <div><b>3D 視角控制</b>：滑鼠左鍵按住拖曳可360°旋轉、右鍵平移、滾輪無段縮放視角。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-hand-pointer text-cyan-400 mt-1"></i>
+          <div><b>點選互動</b>：點選任意島嶼、微縮實驗器皿、心臟或皮克敏，即可開啟語音解說與右側學習抽屜。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-magnifying-glass text-yellow-400 mt-1"></i>
+          <div><b>全幅高清圖解</b>：點擊筆記中任一張圖表，即可開啟 Pan & Zoom 燈箱（支援滾輪 75%～350% 放大）。</div>
+        </div>
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-map-location-dot text-rose-400 mt-1"></i>
+          <div><b>章節無縫跳轉</b>：可隨時在自然第 2 章與第 3 章之間切換學習！</div>
+        </div>
+      </div>
+      <div class="pt-3 border-t border-white/10 flex items-center justify-between">
+        <a href="https://pwb6331-hub.github.io/stella-science-island-ch2/" target="_blank" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-amber-300 font-bold border border-amber-400/30 flex items-center gap-1.5">
+          <i class="fa-solid fa-arrow-left"></i> 前往第2章 3D島
+        </a>
+        <button onclick="toggleHelpModal()" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold">
+          開始探索
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    // =========================================================================
+    // 國中七上自然 第 3 章【生物的運輸與防禦】全方位教材與題庫數據庫
+    // =========================================================================
+    const CHAPTER_DATA = {
+      '3-1': {
+        code: '3-1',
+        title: '植物體內物質的運輸構造',
+        badge: '植物維管束',
+        themeColor: 0x10b981,
+        islandPos: { x: -32, y: 0, z: -16 },
+        mentor: {
+          name: '探險隊長「木質小芹」',
+          role: '3-1 植物解剖名師',
+          speech: '「嗨！我是小芹！記住維管束雙核心：木質部在內側運水、韌皮部在外側運養分！向日葵有形成層能加粗，玉米沒有形成層不會長年輪喔！」'
+        },
+        notes: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/20">
+    <h4 class="font-bold text-emerald-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-tree"></i> 一、維管束的核心組成與功能
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>木質部 (Xylem)</b>：分布在維管束<b>內側</b>。由厚壁木化死細胞相連成細管，負責運輸<b>水分與無機鹽</b>（單向向上），兼具<b>支持植物體</b>功能。</li>
+      <li><b>韌皮部 (Phloem)</b>：分布在維管束<b>外側</b>。由活細胞組成，負責運輸光合作用製造的<b>有機養分</b>（雙向流動）。</li>
+      <li><b>形成層 (Cambium)</b>：位於木質部與韌皮部之間的分生組織。<b>向內分裂產生新木質部</b>，<b>向外分裂產生新韌皮部</b>，使植物莖不斷加粗！</li>
+    </ul>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-white/10">
+    <h4 class="font-bold text-cyan-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-shapes"></i> 二、雙子葉 vs 單子葉植物維管束排列
+    </h4>
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="p-2 rounded-xl bg-slate-800/60 border border-emerald-500/20">
+        <b class="text-emerald-400">環狀排列（雙子葉）</b>
+        <p class="mt-1 text-slate-300">代表：向日葵、榕樹、朱槿。</p>
+        <p class="text-slate-300">特徵：維管束呈<b>環狀</b>排列，<b>具有形成層</b>，莖能逐年加粗，葉脈為<b>網狀脈</b>。</p>
+      </div>
+      <div class="p-2 rounded-xl bg-slate-800/60 border border-cyan-500/20">
+        <b class="text-cyan-400">散生排列（單子葉）</b>
+        <p class="mt-1 text-slate-300">代表：玉米、水稻、竹子、百合。</p>
+        <p class="text-slate-300">特徵：維管束<b>散生</b>分布，<b>通常不具形成層</b>，莖無法加粗，葉脈為<b>平行脈</b>。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/20">
+    <h4 class="font-bold text-amber-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-ring"></i> 三、年輪 (Annual Ring) 與樹皮的真相
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>年輪是木質部！</b> 年輪完全由<b>木質部</b>構成，與韌皮部無關。</li>
+      <li><b>春夏早材 (春材)</b>：氣候溫暖雨量充沛，形成層分裂快速，細胞大、管壁薄，顏色<b>較淡、質地疏鬆</b>。</li>
+      <li><b>秋冬晚材 (秋材)</b>：氣候寒冷乾燥，細胞分裂緩慢，細胞小、管壁厚，顏色<b>較深、質地緊密</b>。</li>
+      <li>深淺相間的一道同心圓即代表<b>一年</b>。中空神木仍能活，因為心材老木質部雖中空失去功能，外圍<b>新木質部仍可運水</b>！</li>
+      <li><b>樹皮定義</b>：形成層<b>以外</b>的所有組織（包含韌皮部、皮層與木栓層）。</li>
+    </ul>
+  </div>
+</div>`,
+        lab: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-4 rounded-2xl bg-slate-900/70 border border-emerald-500/30">
+    <div class="flex items-center justify-between mb-2">
+      <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-xs border border-emerald-400/30">會考必考實驗</span>
+      <span class="text-slate-400 text-xs">實驗 3-1</span>
+    </div>
+    <h4 class="text-base font-bold text-white mb-2">🌿 探討植物水分的運輸與芹菜維管束觀察</h4>
+    <div class="space-y-2 text-slate-300">
+      <p><b>【實驗步驟】</b></p>
+      <ol class="list-decimal list-inside space-y-1 pl-1">
+        <li>取兩支等量紅墨水量的量筒，分別插放<b>「帶有茂盛葉片芹菜」</b>與<b>「摘除全部葉片芹菜」</b>。</li>
+        <li>量筒水面滴加少許沙拉油（防止水面自然蒸發，確保水面下降全為植物吸收）。</li>
+        <li>靜置照光數小時後，紀錄量筒水面下降刻度。</li>
+        <li>取出芹菜葉柄，分別進行<b>橫切</b>與<b>縱切</b>，以放大鏡或顯微鏡觀察紅色染料分布。</li>
+      </ol>
+      <p class="pt-2"><b>【實驗結論與關鍵考點】</b></p>
+      <ul class="list-disc list-inside space-y-1 pl-1 text-emerald-200">
+        <li><b>水面下降速率</b>：帶葉芹菜水面下降遠快於無葉芹菜，證明<b>「葉片蒸散作用是水分上升的主要動力」</b>！</li>
+        <li><b>橫切面觀察</b>：被紅墨水染紅的點呈<b>環狀排列在內側</b>，證明水分由<b>木質部</b>運輸！</li>
+        <li><b>縱切面觀察</b>：可看到一條條連續縱貫的<b>紅色細管</b>，證明木質部由上下貫通的管狀死細胞構成。</li>
+      </ul>
+    </div>
+  </div>
+</div>`,
+        quizzes: [
+          { q: '樹皮是指哪一構造及其以外的所有部分？', a: ['木質部', '形成層', '韌皮部', '根部'], c: 2, exp: '樹皮是指維管束形成層以外的所有組織，包含韌皮部與周皮！' },
+          { q: '一般木製家具、原木地板主要是由植物的哪一部分製成？', a: ['木質部', '形成層', '樹皮', '韌皮部'], c: 0, exp: '木材質地堅硬，主要是由植物多年累積的木質部細胞壁木化而成！' },
+          { q: '中空的神木仍然可以枝繁葉茂正常存活，這是因為？', a: ['中空處由老化的韌皮部形成', '中心老化的木質部本就不具運水功能，由外圍新木質部運水', '神木由樹皮直接吸收水分', '神木由韌皮部代替木質部運水'], c: 1, exp: '老神木樹幹中心為老化不具運輸功能的心材，靠外側年輕的新生木質部仍可正常運輸水分！' },
+          { q: '植物葉片中葉脈的維管束排列方向為何？', a: ['木質部在上方（靠上表皮），韌皮部在下方（靠下表皮）', '木質部在下方，韌皮部在上方', '木質部在中央，韌皮部包圍四周', '兩者雜亂混合無固定排列'], c: 0, exp: '記憶口訣「木上韌下」！葉脈中木質部靠近上表皮，韌皮部靠近下表皮。' },
+          { q: '四季分明的溫帶地區，樹木年輪中顏色較淡、質地較疏鬆的環帶是？', a: ['秋冬長出的晚材', '春夏長出的早材', '受病蟲害感染的木材', '韌皮部老化形成的構造'], c: 1, exp: '春夏溫暖多雨，形成層分裂旺盛，長出的細胞大且壁薄，呈現顏色較淡的春材（早材）。' },
+          { q: '下列四種植物中，哪一種莖內的維管束排列最可能「呈散生且無形成層」？', a: ['榕樹', '向日葵', '水稻', '朱槿'], c: 2, exp: '水稻為單子葉草本植物，莖內維管束為散生排列，通常不具形成層，莖無法不斷加粗。' }
+        ]
+      },
+
+      '3-2': {
+        code: '3-2',
+        title: '植物體內水分與養分的運輸',
+        badge: '蒸散與養分流',
+        themeColor: 0x06b6d4,
+        islandPos: { x: 32, y: 0, z: -16 },
+        mentor: {
+          name: '蒸散探險家「小露」',
+          role: '3-2 蒸散流體導師',
+          speech: '「嗶嗶！記住會考終極原則：水分永遠『單向由下往上』，蒸散作用就像喝珍奶的大吸管！養分則由韌皮部『雙向運輸』，環狀剝皮根會先餓死喔！」'
+        },
+        notes: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/20">
+    <h4 class="font-bold text-cyan-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-droplet"></i> 一、水分與無機鹽的吸收與運輸
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>吸收器官</b>：植物根部表皮細胞向外突出形成<b>「根毛」</b>，大幅增加吸收<b>表面積</b>，藉由<b>滲透作用</b>吸水。</li>
+      <li><b>運輸管道與方向</b>：由<b>木質部</b>負責，方向<b>永遠單向由下往上</b>（根 → 莖 → 葉）。</li>
+      <li><b>水分上升三大動力</b>：
+        <ol class="list-decimal list-inside pl-2 space-y-0.5 text-cyan-200">
+          <li><b>蒸散作用 (Transpiration)</b>：<b>最強大的原動力</b>！氣孔水分蒸散產生的拉力，將水分子一網拉起。</li>
+          <li><b>根壓</b>：根部滲透吸水造成的向上推力。</li>
+          <li><b>毛細現象</b>：水分子間內聚力與管壁附著力，使細管內水柱連續不中斷。</li>
+        </ol>
+      </li>
+    </ul>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-white/10">
+    <h4 class="font-bold text-emerald-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-seedling"></i> 二、光合作用養分的運輸途徑
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>製造部位</b>：葉肉細胞光合作用製造<b>葡萄糖</b>，轉化為<b>蔗糖</b>進入韌皮部。</li>
+      <li><b>運輸管道與方向</b>：由<b>韌皮部</b>運輸，方向為<b>雙向運輸（可由上到下，亦可由下到上）</b>！</li>
+      <li><b>夏季生長</b>：葉製造的養分經韌皮部<b>向下</b>運送到根莖儲存成澱粉。</li>
+      <li><b>春季發芽</b>：根部儲存的養分分解成糖，經韌皮部<b>向上</b>運送供應枝條萌芽開花！</li>
+    </ul>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/20">
+    <h4 class="font-bold text-rose-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-ban"></i> 三、環狀剝皮 (Girdling) 致命致死順序
+    </h4>
+    <p class="text-slate-200 mb-1">若將樹幹主幹做一圈環狀剝皮（剝去樹皮＝切斷韌皮部）：</p>
+    <div class="p-2.5 rounded-xl bg-slate-900/80 border border-rose-500/30 text-rose-200 font-bold text-center">
+      ① 葉製造的養分運送受阻 → ② 傷口上方養分累積腫脹 → ③ 根細胞因缺乏養分先餓死 → ④ 根部無法吸水，水分運送受阻 → ⑤ 葉細胞缺水乾枯死亡！
+    </div>
+  </div>
+</div>`,
+        lab: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-4 rounded-2xl bg-slate-900/70 border border-cyan-500/30">
+    <div class="flex items-center justify-between mb-2">
+      <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-xs border border-cyan-400/30">實驗重點透析</span>
+      <span class="text-slate-400 text-xs">氣孔與蒸散</span>
+    </div>
+    <h4 class="text-base font-bold text-white mb-2">🍃 葉片蒸散作用速率測定與氣孔調節</h4>
+    <div class="space-y-2 text-slate-300">
+      <p><b>【蒸散速率影響變因探究】</b></p>
+      <ul class="list-disc list-inside space-y-1 pl-1">
+        <li><b>光照強弱</b>：光照越強，氣孔開度越大，蒸散作用越旺盛。</li>
+        <li><b>溫度高低</b>：溫度適度升高，水分蒸發加快，蒸散速率增加。</li>
+        <li><b>空氣濕度</b>：外界濕度越大，水氣擴散越慢，<b>蒸散作用越弱</b>。</li>
+        <li><b>風速快慢</b>：微風可吹散葉表濕氣層，加快蒸散；狂風時氣孔關閉以防脫水。</li>
+      </ul>
+      <p class="pt-2"><b>【夾鏈袋集水實驗】</b></p>
+      <p class="text-cyan-200">用透明塑膠袋套住盆栽帶葉枝條密封，照光一段時間袋內出現透明水珠，以<b>氯化亞鈷試紙檢驗由藍變粉紅</b>，證實由氣孔蒸散之水蒸氣凝結！</p>
+    </div>
+  </div>
+</div>`,
+        quizzes: [
+          { q: '植物根部表皮細胞向外突出形成根毛，主要生理功能為何？', a: ['增加吸收水分與無機鹽的表面積', '增強固定植物體於土壤的能力', '行光合作用自製養分', '分泌酸性物質溶解岩石'], c: 0, exp: '根毛是單一表皮細胞向外突出的毛狀細絲，極大幅度增加與土壤水接觸之吸收表面積。' },
+          { q: '將大樹幹進行環狀剝皮導致植物死亡，其死亡原因的先後順序為何？(甲.根細胞死亡 乙.葉細胞死亡 丙.水分運送受阻 丁.養分運送受阻)', a: ['丁→甲→丙→乙', '甲→乙→丙→丁', '丁→乙→甲→丙', '甲→丁→乙→丙'], c: 0, exp: '環狀剝皮切斷外側韌皮部，養分向下運送受阻(丁)→根部缺乏養分餓死(甲)→根無法吸水致水分運送受阻(丙)→葉細胞乾枯死亡(乙)。' },
+          { q: '木棉在冬天葉片全部掉光，但隔年初春仍能綻放盛開花朵，所需的能量來源為何？', a: ['樹幹行光合作用自製養分', '去年儲存在根部的養分經韌皮部向上運輸供應', '根部吸收大量無機鹽轉化成熱量', '由木質部運送葡萄糖'], c: 1, exp: '儲存在根部的養分分解為糖類，經由韌皮部向上運輸到枝幹頂端供應花芽發育所需！' },
+          { q: '下列何者是促使植物體內水分能由根部克服地心引力上升到十幾公尺樹頂的最主要動力？', a: ['根部的滲透壓推力', '毛細現象', '葉片的蒸散作用拉力', '光合作用消耗水分'], c: 2, exp: '氣孔蒸散作用所產生的向上拉升力，是高大喬木水分長距離運輸的最關鍵主動力！' },
+          { q: '關於植物體內物質運輸的敘述，下列何者正確？', a: ['水分與無機鹽由韌皮部運輸', '養分只能單向由上往下運輸', '水分的運輸方向可由下往上，也可由上往下', '水分在木質部內永遠只能單向由根部往上運輸'], c: 3, exp: '水分與無機鹽由木質部單向向上運送；光合作用養分則由韌皮部雙向運送。' },
+          { q: '在乾燥炎熱的夏日正午，植物葉片常會暫時萎凋垂下，且氣孔關閉，此現象的生理意義為？', a: ['加速吸收土壤中的肥料', '防止體內水分過度蒸散而枯死', '促進根部呼吸作用', '利於吸收更多二氧化碳'], c: 1, exp: '高溫乾旱時氣孔關閉可減少蒸散失水，是植物防止過度失水脫水死亡的重要自我保護機制。' }
+        ]
+      },
+
+      '3-3': {
+        code: '3-3',
+        title: '動物體內物質的運輸',
+        badge: '心血管與循環',
+        themeColor: 0xef4444,
+        islandPos: { x: -32, y: 0, z: 28 },
+        mentor: {
+          name: '巡航隊長「漢克」',
+          role: '3-3 心血管系統導師',
+          speech: '「嗶嗶！我是隊長漢克！心臟左心室肌肉最厚！體循環送全身、肺循環跑肺部！小魚尾鰭顯微鏡下：由粗分細是動脈、單行排列是微血管喔！」'
+        },
+        notes: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/20">
+    <h4 class="font-bold text-rose-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-heart-pulse"></i> 一、人類心臟四腔室與循環動力
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>四腔室構造</b>：心房在上（收納血液）、心室在下（擠出血液）。</li>
+      <li><b>左心室壁最厚</b>：左心室需收縮產生高壓，將血液擠入主動脈打至全身組織，因此肌肉層最發達。</li>
+      <li><b>防止逆流閥門</b>：房室之間具<b>房室瓣</b>，心室與動脈之間具<b>半月瓣</b>，確保血液單向流動。</li>
+      <li><b>心搏與脈搏</b>：心臟收縮使動脈管壁產生規律擴張博動稱為<b>脈搏</b>，正常人<b>心搏次數等於脈搏次數</b>。</li>
+    </ul>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-white/10">
+    <h4 class="font-bold text-amber-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-arrows-split-up-and-left"></i> 二、血管三大類型功能大比拼
+    </h4>
+    <div class="space-y-1.5 text-xs text-slate-300">
+      <p><b>動脈 (Artery)</b>：出心臟 $\rightarrow$ 管壁最厚、富彈性、管腔小、血壓最高、血流最快。</p>
+      <p><b>微血管 (Capillary)</b>：管壁僅<b>一層內皮細胞</b>厚、管徑最細（紅血球<b>單行排隊通過</b>）、血流最慢 $\rightarrow$ <b>物質與氣體交換唯一場所</b>！</p>
+      <p><b>靜脈 (Vein)</b>：回心臟 $\rightarrow$ 管壁較薄、彈性差、管腔大、內含<b>瓣膜</b>防止血液逆流。</p>
+    </div>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/20">
+    <h4 class="font-bold text-indigo-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-route"></i> 三、體循環 vs 肺循環 雙循環路徑
+    </h4>
+    <div class="space-y-1.5 text-xs">
+      <div class="p-2 rounded-xl bg-slate-900/80 border border-rose-500/30">
+        <b class="text-rose-400">體循環 (Systemic Circulation)</b>：充氧血變缺氧血
+        <p class="text-slate-300 mt-0.5 font-mono">左心室 → 主動脈 → 全身微血管(交換養分/氣體) → 上下大靜脈 → 右心房</p>
+      </div>
+      <div class="p-2 rounded-xl bg-slate-900/80 border border-blue-500/30">
+        <b class="text-blue-400">肺循環 (Pulmonary Circulation)</b>：缺氧血變充氧血
+        <p class="text-slate-300 mt-0.5 font-mono">右心室 → 肺動脈 → 肺部微血管(交換氣體換入氧) → 肺靜脈 → 左心房</p>
+      </div>
+    </div>
+  </div>
+</div>`,
+        lab: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-4 rounded-2xl bg-slate-900/70 border border-rose-500/30">
+    <div class="flex items-center justify-between mb-2">
+      <span class="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold text-xs border border-rose-400/30">經典會考實驗</span>
+      <span class="text-slate-400 text-xs">實驗 3-3</span>
+    </div>
+    <h4 class="text-base font-bold text-white mb-2">🐟 觀察小魚尾鰭的血液流動</h4>
+    <div class="space-y-2 text-slate-300">
+      <p><b>【操作要領】</b></p>
+      <ul class="list-disc list-inside space-y-1 pl-1">
+        <li>用<b>浸濕之棉花</b>包裹小魚身體，僅露出<b>口部與尾鰭</b>（維持鰓部水分呼吸，防止小魚窒息）。</li>
+        <li>置於培養皿內，於複式顯微鏡<b>低倍鏡</b>下觀察尾鰭血流。</li>
+      </ul>
+      <p class="pt-2"><b>【血管判讀核心原則（顯微鏡為倒立像）】</b></p>
+      <ol class="list-decimal list-inside space-y-1 pl-1 text-rose-200">
+        <li><b>動脈</b>：血液由<b>較粗血管分支流入較細血管</b>，血流速度最快。</li>
+        <li><b>微血管</b>：管徑最細，只容許<b>紅血球單行排列通過</b>，血流速度最慢。</li>
+        <li><b>靜脈</b>：血液由<b>較細分支匯集成較粗血管</b>，血流速度中等。</li>
+      </ol>
+    </div>
+  </div>
+</div>`,
+        quizzes: [
+          { q: '人體心臟的四個腔室中，哪一個腔室的肌肉壁最為厚實？', a: ['右心房', '右心室', '左心房', '左心室'], c: 3, exp: '左心室負責將充氧血強力擠壓送入主動脈以供應全身各部位，因此肌肉層最發達厚實。' },
+          { q: '小明利用顯微鏡觀察小魚尾鰭的血液流動，他判斷某一條血管為「微血管」的最關鍵依據是？', a: ['血管內血流速度最快', '紅血球在管內呈單行排隊通過', '管壁最厚富彈性', '管內具有防止逆流的瓣膜'], c: 1, exp: '微血管管徑極小，內徑與紅血球直徑相當，紅血球只能單行排隊通過，是判斷微血管的黃金特徵。' },
+          { q: '血液在心臟與血管中循環，下列哪一段血管內流動的是「充氧血」？', a: ['肺動脈', '上大靜脈', '肺靜脈', '下大靜脈'], c: 2, exp: '肺靜脈將肺部剛完成氣體交換的高含氧血液送回左心房，因此內部流動的是鮮紅的「充氧血」。' },
+          { q: '血液成分中，體積最大且具有細胞核，能行變形蟲運動穿出微血管吞噬病原的是？', a: ['紅血球', '白血球', '血小板', '血漿'], c: 1, exp: '白血球具細胞核，體積最大，具變形運動能力，負責人體的免疫防禦吞噬病原。' },
+          { q: '下列關於人體三種血管的比較，何者錯誤？', a: ['管壁厚度：動脈＞靜脈＞微血管', '管腔大小：靜脈＞動脈＞微血管', '血流速度：動脈＞微血管＞靜脈', '血壓高低：動脈＞微血管＞靜脈'], c: 2, exp: '血流速度順序為：動脈 ＞ 靜脈 ＞ 微血管（微血管最慢，利於物質充分交換）！' },
+          { q: '正常人安靜狀態下測量手腕處的橈動脈脈搏，其每分鐘脈搏次數應等於？', a: ['呼吸次數', '心室收縮的心搏次數', '胃壁蠕動次數', '紅血球分解次數'], c: 1, exp: '心室收縮將血液射入主動脈帶動動脈管壁搏動即為脈搏，正常人脈搏次數與心搏次數完全一致。' }
+        ]
+      },
+
+      '3-4': {
+        code: '3-4',
+        title: '人體的防禦作用與淋巴系統',
+        badge: '淋巴與免疫防禦',
+        themeColor: 0x8b5cf6,
+        islandPos: { x: 32, y: 0, z: 28 },
+        mentor: {
+          name: '免疫衛士「白盾」',
+          role: '3-4 淋巴防禦大師',
+          speech: '「嗶嗶！我是免疫衛士白盾！第一道皮膜擋外面，第二道發炎吞噬通殺，第三道抗體鎖定專一性！打疫苗就是引進無害假想敵建立記憶細胞喔！」'
+        },
+        notes: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-500/20">
+    <h4 class="font-bold text-purple-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-shield-virus"></i> 一、淋巴系統的生成與循環
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>體液三態轉換</b>：<b>血漿</b>（自微血管滲出） $\rightarrow$ <b>組織液</b>（浸潤組織細胞） $\rightarrow$ <b>淋巴</b>（進入淋巴微管） $\rightarrow$ 淋巴管 $\rightarrow$ <b>匯入靜脈重回血液</b>。</li>
+      <li><b>淋巴液成分</b>：主要是水、無機鹽與<b>白血球（淋巴球）</b>，<b>正常情況下完全沒有紅血球與血小板</b>！</li>
+      <li><b>淋巴結 (Lymph Node)</b>：主要分布於頸部、腋下及鼠蹊部。內含大量淋巴球與巨噬細胞，如過濾器般攔截病原體。感染時常腫大疼痛！</li>
+    </ul>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-white/10">
+    <h4 class="font-bold text-emerald-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-shield-halved"></i> 二、人體三道免疫防線大拆解
+    </h4>
+    <div class="space-y-2 text-xs">
+      <div class="p-2 rounded-xl bg-slate-800/80 border border-slate-700">
+        <b class="text-emerald-400">第一道防線（非專一性皮膜阻隔）</b>
+        <p class="text-slate-300">皮膚角質層阻擋、呼吸道與消化道黏膜纖毛、胃酸強酸殺菌、眼淚溶菌酶。</p>
+      </div>
+      <div class="p-2 rounded-xl bg-slate-800/80 border border-slate-700">
+        <b class="text-amber-400">第二道防線（非專一性發炎與吞噬）</b>
+        <p class="text-slate-300">病原侵入組織 $\rightarrow$ 釋放組織胺使血管擴張 $\rightarrow$ 局部出現<b>紅、腫、熱、痛</b> $\rightarrow$ 白血球穿出微血管進行<b>吞噬作用</b>。</p>
+      </div>
+      <div class="p-2 rounded-xl bg-slate-800/80 border border-purple-500/30">
+        <b class="text-purple-400">第三道防線（專一性免疫反應）</b>
+        <p class="text-slate-300">由特殊白血球執行：<b>T 細胞</b>摧毀被病毒感染之宿主細胞；<b>B 細胞</b>分化產生專屬的 <b>Y 型「抗體」</b>，與特定抗原中和！</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/20">
+    <h4 class="font-bold text-indigo-300 text-sm mb-1.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-syringe"></i> 三、疫苗 (Vaccine) 與免疫記憶原理
+    </h4>
+    <ul class="list-disc list-inside space-y-1 text-slate-200">
+      <li><b>疫苗成分</b>：減毒、去活化之病原體或蛋白質片段（抗原），不具致病力但能激發人體免疫反應。</li>
+      <li><b>主動免疫</b>：注射疫苗刺激 B 細胞產生<b>專一性抗體</b>並保留<b>記憶細胞</b>。</li>
+      <li><b>二次反應效應</b>：當日後真正具有毒性的病原體入侵時，記憶細胞能以極快速度產生<b>極大量抗體</b>，在未發病前迅速殲滅病原！</li>
+    </ul>
+  </div>
+</div>`,
+        lab: `
+<div class="space-y-4 text-xs sm:text-sm">
+  <div class="p-4 rounded-2xl bg-slate-900/70 border border-purple-500/30">
+    <div class="flex items-center justify-between mb-2">
+      <span class="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold text-xs border border-purple-400/30">核心原理剖析</span>
+      <span class="text-slate-400 text-xs">抗原抗體反應</span>
+    </div>
+    <h4 class="text-base font-bold text-white mb-2">🛡️ 專一性抗體中和與發炎反應微觀機制</h4>
+    <div class="space-y-2 text-slate-300">
+      <p><b>【鎖與鑰匙的專一性結合】</b></p>
+      <p>抗體是由蛋白質構成的 Y 字型分子，頂端具備獨特的抗原結合位點。A 型流感抗體只能結合 A 型流感病毒，對水痘或麻疹病毒毫無效果，此特性稱為<b>「專一性」</b>。</p>
+      <p class="pt-2"><b>【發炎反應四大特徵生理意義】</b></p>
+      <ul class="list-disc list-inside space-y-1 pl-1 text-purple-200">
+        <li><b>紅與熱</b>：微血管局部擴張、血流量劇增，帶來更多白血球。</li>
+        <li><b>腫與痛</b>：微血管管壁通透性大增，血漿滲出組織液增加壓迫神經末梢。</li>
+      </ul>
+    </div>
+  </div>
+</div>`,
+        quizzes: [
+          { q: '下列關於人體淋巴系統組成的敘述，何者正確？', a: ['淋巴中含有大量紅血球', '組織液流入淋巴管後便稱為淋巴', '淋巴管最後會直接注入心臟的左心室', '血小板會在淋巴結內大量生成'], c: 1, exp: '部分組織液滲透進入微淋巴管後即稱為淋巴液，經由淋巴管最後注入鎖骨下大靜脈重回血液。' },
+          { q: '人體抵抗病原體入侵的防線中，下列何者屬於「專一性防禦作用」？', a: ['皮膚角質層阻擋細菌入侵', '受傷傷口產生紅腫熱痛的發炎反應', '白血球進行吞噬作用吃掉病原', 'B細胞產生專一性抗體中和特定病毒'], c: 3, exp: '抗體針對特定抗原進行專一性結合中和，屬於第三道專一性防禦；其餘皆為非專一性防禦。' },
+          { q: '嬰幼兒定期接種卡介苗、麻疹等疫苗，其最主要的防禦原理為何？', a: ['直接注射現成抗體以殺死體內病毒', '將減毒或無毒抗原打入體內，誘發自身免疫產生抗體與記憶細胞', '改變體內血液酸鹼度使病毒無法存活', '增厚皮膚角質層阻擋細菌侵入'], c: 1, exp: '疫苗提供抗原刺激免疫系統，使人體產生專一性抗體與長壽記憶細胞，日後遇病原能迅速消滅。' },
+          { q: '當手指被生鏽鐵釘刺傷後，傷口周遭出現「紅、腫、熱、痛」現象，稱為？', a: ['專一性免疫反應', '發炎反應', '過敏休克反應', '組織壞死反應'], c: 1, exp: '局部微血管擴張、通透性增加所導致的紅腫熱痛，屬於第二道防線之典型「發炎反應」。' },
+          { q: '淋巴結內含有豐富的何種細胞，能發揮如濾網般過濾清除病原體的功能？', a: ['紅血球與血小板', '神經元細胞', '白血球（淋巴球與巨噬細胞）', '皮膚表皮角質細胞'], c: 2, exp: '淋巴結內密布大量淋巴球與巨噬細胞，專職過濾攔截隨淋巴液流經的細菌、病毒及異物。' },
+          { q: '下列關於人類體液循環的敘述，何者錯誤？', a: ['血漿從微血管滲出至組織細胞間隙稱為組織液', '組織液滲入微淋巴管後稱為淋巴', '淋巴管最後注入主動脈', '淋巴循環有助於維持體內水分與蛋白質的平衡'], c: 2, exp: '淋巴管匯集後是注入「靜脈」（鎖骨下靜脈），重返血液循環，絕非注入主動脈。' }
+        ]
+      }
+    };
+
+
+    // =========================================================================
+    // Three.js 3D 引擎與場景常數 (Scene, Camera, Renderer, Controls)
+    // =========================================================================
+    let scene, camera, renderer, controls;
+    let clock = new THREE.Clock();
+    let currentIslandId = 'home';
+    let targetCamPos = null;
+    let targetLookAt = null;
+
+    // Zero-GC 常駐計算向量快取
+    const _projVec = new THREE.Vector3();
+    const _rayMouse = new THREE.Vector2();
+    const _raycaster = new THREE.Raycaster();
+
+    // 場景物件群組
+    const islandMeshes = [];
+    const billboardPins = [];
+    const planets = [];
+    const animatedChars = [];
+    const animatedCreatures = [];
+    let floatingParticles = null;
+    let centralCoreGroup = null;
+
+    // 音效與語音狀態
+    let isAudioEnabled = true;
+    let arePinsVisible = true;
+    let currentUnitCode = '3-1';
+    let currentActiveTab = 'notes';
+
+    // 幾何形狀快取 (Geometry Cache)
+    const GeoCache = {
+      sphereLow: new THREE.SphereGeometry(1, 10, 10),
+      sphereMed: new THREE.SphereGeometry(1, 16, 16),
+      sphereHigh: new THREE.SphereGeometry(1, 24, 24),
+      cylIslandTop: new THREE.CylinderGeometry(11.5, 11.5, 2.0, 36),
+      cylIslandRock: new THREE.CylinderGeometry(11.5, 4.5, 5.8, 36),
+      torusRing: new THREE.TorusGeometry(12.2, 0.45, 12, 48),
+      charHead: new THREE.SphereGeometry(0.72, 18, 18),
+      charBody: new THREE.CylinderGeometry(0.55, 0.72, 1.15, 18),
+      charLimb: new THREE.CylinderGeometry(0.15, 0.18, 0.68, 10),
+      charEye: new THREE.SphereGeometry(0.09, 8, 8)
+    };
+
+    // PBR 物理與黏土材質生成器
+    function getClayMat(colorHex, roughness = 0.45, metalness = 0.08, emissive = 0x000000, emissiveIntensity = 0) {
+      return new THREE.MeshStandardMaterial({
+        color: colorHex,
+        roughness: roughness,
+        metalness: metalness,
+        emissive: emissive,
+        emissiveIntensity: emissiveIntensity
+      });
+    }
+
+    function getGlassMat(colorHex = 0xffffff, opacity = 0.4, transmission = 0.92) {
+      return new THREE.MeshPhysicalMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: opacity,
+        roughness: 0.06,
+        metalness: 0.1,
+        transmission: transmission,
+        ior: 1.48,
+        reflectivity: 0.8
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 3D 浮空標籤系統 (Billboard Pins with 2D Collision Avoidance)
+    // -------------------------------------------------------------------------
+    function registerIslandHubPin(targetMesh, yOffset, unitCode, labelText, borderClass) {
+      const pinDiv = document.createElement('div');
+      pinDiv.className = `billboard-pin flex flex-col items-center gap-1.5 transition-transform duration-200`;
+      pinDiv.innerHTML = `
+        <div class="glassmorphism px-3.5 py-1.5 rounded-2xl border ${borderClass} shadow-xl flex items-center gap-2 text-xs sm:text-sm font-bold text-white hover:scale-105 active:scale-95 transition-all">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>${unitCode} ${labelText}</span>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md px-2 py-1 rounded-xl border border-white/10 shadow-lg text-[11px]">
+          <button onclick="directOpenDrawer('${unitCode}', 'notes', event)" class="px-2 py-0.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white font-semibold">📖 重點</button>
+          <button onclick="directOpenDrawer('${unitCode}', 'lab', event)" class="px-2 py-0.5 rounded-lg bg-teal-600/80 hover:bg-teal-500 text-white font-semibold">🔬 實驗</button>
+          <button onclick="directOpenDrawer('${unitCode}', 'quiz', event)" class="px-2 py-0.5 rounded-lg bg-cyan-600/80 hover:bg-cyan-500 text-white font-semibold">🎓 評量</button>
+        </div>
+      `;
+      document.getElementById('pins-container').appendChild(pinDiv);
+      billboardPins.push({ mesh: targetMesh, el: pinDiv, yOffset: yOffset, unitCode: unitCode });
+    }
+
+    function registerPin(targetMesh, yOffset, title, subtitle, borderClass, unitCode, metaData, targetTab = 'notes') {
+      const pinDiv = document.createElement('div');
+      pinDiv.className = `billboard-pin flex flex-col items-center gap-1 transition-transform duration-200`;
+      pinDiv.innerHTML = `
+        <div class="glassmorphism px-3 py-1 rounded-xl border ${borderClass} shadow-lg flex items-center gap-1.5 text-xs font-semibold text-slate-100 hover:scale-105 active:scale-95 transition-all cursor-pointer">
+          <span>${title}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-emerald-300">${subtitle}</span>
+        </div>
+      `;
+      pinDiv.onclick = (e) => {
+        e.stopPropagation();
+        triggerEntityClick(metaData, targetTab);
+      };
+      document.getElementById('pins-container').appendChild(pinDiv);
+      billboardPins.push({ mesh: targetMesh, el: pinDiv, yOffset: yOffset, unitCode: unitCode, metaData: metaData, targetTab: targetTab });
+    }
+
+    function updateBillboardPins() {
+      if (!arePinsVisible) return;
+      const widthHalf = window.innerWidth / 2;
+      const heightHalf = window.innerHeight / 2;
+
+      for (let i = 0; i < billboardPins.length; i++) {
+        const pin = billboardPins[i];
+        if (!pin.mesh) continue;
+
+        pin.mesh.getWorldPosition(_projVec);
+        _projVec.y += pin.yOffset;
+        _projVec.project(camera);
+
+        if (_projVec.z > 1) {
+          pin.el.style.display = 'none';
+        } else {
+          pin.el.style.display = 'flex';
+          const sx = Math.round((_projVec.x * widthHalf) + widthHalf);
+          const sy = Math.round((-_projVec.y * heightHalf) + heightHalf);
+          pin.el.style.left = `${sx}px`;
+          pin.el.style.top = `${sy}px`;
+        }
+      }
+    }
+
+    function togglePinVisibility() {
+      arePinsVisible = !arePinsVisible;
+      const container = document.getElementById('pins-container');
+      container.style.display = arePinsVisible ? 'block' : 'none';
+      document.getElementById('btn-pin').classList.toggle('text-slate-500', !arePinsVisible);
+      document.getElementById('btn-pin').classList.toggle('text-teal-400', arePinsVisible);
+    }
+
+    // -------------------------------------------------------------------------
+    // WebGL 場景與攝影機初始化
+    // -------------------------------------------------------------------------
+    function initWebGL() {
+      const container = document.getElementById('webgl-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060b18);
+      scene.fog = new THREE.FogExp2(0x060b18, 0.0075);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 600);
+      camera.position.set(0, 58, 88);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2.08;
+      controls.minDistance = 15;
+      controls.maxDistance = 180;
+      controls.target.set(0, 4, 0);
+
+      // 環境光與主平行光源
+      const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 0.7);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.25);
+      dirLight.position.set(45, 80, 50);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 10;
+      dirLight.shadow.camera.far = 250;
+      const d = 60;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+
+      // 暖色邊緣逆光
+      const rimLight = new THREE.DirectionalLight(0x10b981, 0.45);
+      rimLight.position.set(-50, 40, -50);
+      scene.add(rimLight);
+
+      // 構建核心群島與星空
+      buildStarfieldAndSolarSystem();
+      buildCentralCore();
+      buildFourMiniatureIslands();
+      buildFloatingParticles();
+
+      // 事件監聽
+      window.addEventListener('resize', onWindowResize, false);
+      window.addEventListener('pointermove', onPointerMove, false);
+      window.addEventListener('pointerdown', onPointerDown, false);
+      window.addEventListener('pointerup', onPointerUp, false);
+
+      animate();
+    }
+
+    // -------------------------------------------------------------------------
+    // 星空背景與九大行星公轉巡航
+    // -------------------------------------------------------------------------
+    function buildStarfieldAndSolarSystem() {
+      // 1. 璀璨星空背景
+      const starGeo = new THREE.BufferGeometry();
+      const starCount = 1800;
+      const starPos = new Float32Array(starCount * 3);
+      const starColors = new Float32Array(starCount * 3);
+
+      for (let i = 0; i < starCount; i++) {
+        const radius = 220 + Math.random() * 80;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+        starPos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        starPos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        starPos[i * 3 + 2] = radius * Math.cos(phi);
+
+        const tint = Math.random();
+        if (tint < 0.6) {
+          starColors[i * 3] = 0.9; starColors[i * 3 + 1] = 0.95; starColors[i * 3 + 2] = 1.0;
+        } else if (tint < 0.85) {
+          starColors[i * 3] = 0.3; starColors[i * 3 + 1] = 0.8; starColors[i * 3 + 2] = 0.6;
+        } else {
+          starColors[i * 3] = 0.4; starColors[i * 3 + 1] = 0.8; starColors[i * 3 + 2] = 0.9;
+        }
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+      const starMat = new THREE.PointsMaterial({ size: 1.2, vertexColors: true, transparent: true, opacity: 0.85 });
+      const starField = new THREE.Points(starGeo, starMat);
+      scene.add(starField);
+
+      // 2. 九大行星巡航天體
+      const solarData = [
+        { name: '太陽 Sun', size: 5.5, color: 0xf59e0b, dist: 0, speed: 0, isCore: true },
+        { name: '水星 Mercury', size: 1.1, color: 0x94a3b8, dist: 52, speed: 0.32, yOffset: 12 },
+        { name: '金星 Venus', size: 1.7, color: 0xfbbf24, dist: 66, speed: 0.25, yOffset: -8 },
+        { name: '地球 Earth', size: 1.9, color: 0x38bdf8, dist: 80, speed: 0.20, yOffset: 15 },
+        { name: '火星 Mars', size: 1.3, color: 0xef4444, dist: 94, speed: 0.16, yOffset: -10 },
+        { name: '木星 Jupiter', size: 3.8, color: 0xd97706, dist: 112, speed: 0.11, yOffset: 18 },
+        { name: '土星 Saturn', size: 3.2, color: 0xfde047, dist: 130, speed: 0.08, hasRing: true, yOffset: -12 },
+        { name: '天王星 Uranus', size: 2.3, color: 0x2dd4bf, dist: 148, speed: 0.06, yOffset: 8 },
+        { name: '海王星 Neptune', size: 2.2, color: 0x3b82f6, dist: 166, speed: 0.05, yOffset: -6 }
+      ];
+
+      solarData.forEach((s) => {
+        if (s.isCore) return;
+
+        // 軌道引力線
+        const orbitGeo = new THREE.BufferGeometry();
+        const pts = [];
+        for (let a = 0; a <= 64; a++) {
+          const rad = (a / 64) * Math.PI * 2;
+          pts.push(new THREE.Vector3(Math.cos(rad) * s.dist, s.yOffset, Math.sin(rad) * s.dist));
+        }
+        orbitGeo.setFromPoints(pts);
+        const orbitLine = new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.45 }));
+        scene.add(orbitLine);
+
+        // 行星本體
+        const pMat = getClayMat(s.color, 0.4, 0.1, s.color, 0.2);
+        const pMesh = new THREE.Mesh(new THREE.SphereGeometry(s.size, 16, 16), pMat);
+        pMesh.castShadow = true;
+
+        if (s.hasRing) {
+          const rGeo = new THREE.RingGeometry(s.size * 1.4, s.size * 2.2, 24);
+          const rMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, side: THREE.DoubleSide, transparent: true, opacity: 0.45 });
+          const rMesh = new THREE.Mesh(rGeo, rMat);
+          rMesh.rotation.x = Math.PI / 2.3;
+          pMesh.add(rMesh);
+        }
+
+        const pivot = new THREE.Group();
+        pivot.position.set(s.dist, s.yOffset, 0);
+        pivot.add(pMesh);
+        scene.add(pivot);
+
+        planets.push({ mesh: pMesh, pivot, dist: s.dist, speed: s.speed, angle: Math.random() * Math.PI * 2, yOffset: s.yOffset });
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 中央能源核心：STELLA 3D 陀螺儀
+    // -------------------------------------------------------------------------
+    function buildCentralCore() {
+      centralCoreGroup = new THREE.Group();
+      centralCoreGroup.position.set(0, 6, 0);
+
+      // 核心光球
+      const coreSunMat = getClayMat(0x10b981, 0.2, 0.1, 0x059669, 0.95);
+      const coreSun = new THREE.Mesh(new THREE.SphereGeometry(3.6, 24, 24), coreSunMat);
+      centralCoreGroup.add(coreSun);
+
+      // 外圍雙重旋轉光環
+      const ring1 = new THREE.Mesh(new THREE.TorusGeometry(5.2, 0.22, 12, 36), getClayMat(0x38bdf8, 0.2, 0.5, 0x0284c7, 0.8));
+      ring1.rotation.x = Math.PI / 3;
+      const ring2 = new THREE.Mesh(new THREE.TorusGeometry(6.4, 0.18, 12, 36), getClayMat(0xf43f5e, 0.2, 0.5, 0xe11d48, 0.8));
+      ring2.rotation.y = Math.PI / 4;
+      centralCoreGroup.add(ring1, ring2);
+
+      // 浮空核心底座
+      const coreBase = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 6.5, 2.5, 24), getClayMat(0x0f172a, 0.6, 0.2));
+      coreBase.position.y = -6.5;
+      centralCoreGroup.add(coreBase);
+
+      const coreMeta = {
+        unitCode: 'home',
+        targetTab: 'notes',
+        name: '🌟 STELLA 生物運輸核心能量中樞',
+        role: '全星系母艦 (點擊俯瞰全景)',
+        desc: '匯聚植物維管束水柱拉力、心臟搏動體循環動力、以及免疫淋巴防禦網絡，掌控生命運輸大動脈！'
+      };
+      coreSun.userData = coreMeta;
+      islandMeshes.push(coreSun);
+
+      scene.add(centralCoreGroup);
+    }
+
+    // -------------------------------------------------------------------------
+    // 皮克敏小精靈生成器 (Pikmin Miniature Handcraft)
+    // -------------------------------------------------------------------------
+    function createMiniPikmin(type, stage, scale = 1.0) {
+      const pGroup = new THREE.Group();
+      pGroup.scale.setScalar(scale);
+
+      const pikminConfigs = {
+        red: { color: 0xef4444, spec: 'nose' },
+        yellow: { color: 0xeab308, spec: 'ears' },
+        blue: { color: 0x3b82f6, spec: 'mouth' },
+        white: { color: 0xf8fafc, spec: 'eyes' },
+        glow: { color: 0x86efac, spec: 'glow' }
+      };
+      const cfg = pikminConfigs[type] || pikminConfigs.red;
+      const pMat = getClayMat(cfg.color, 0.42, 0.08, cfg.spec === 'glow' ? 0x22c55e : 0x000000, cfg.spec === 'glow' ? 0.45 : 0);
+
+      // 身軀與頭部
+      const pBody = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.11, 0.62, 12), pMat);
+      pBody.position.y = 0.52;
+      const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), pMat);
+      pHead.position.y = 0.98;
+      pGroup.add(pBody, pHead);
+
+      // 大黑眼眸與白色高光
+      const eyeMat = getClayMat(cfg.spec === 'eyes' ? 0xdc2626 : 0x0a0f1d, 0.15, 0.1);
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), eyeMat);
+      eyeL.position.set(-0.11, 1.02, 0.28);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), eyeMat);
+      eyeR.position.set(0.11, 1.02, 0.28);
+      const catchMat = getClayMat(0xffffff, 0.1, 0.05);
+      const cL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), catchMat);
+      cL.position.set(-0.09, 1.05, 0.35);
+      const cR = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), catchMat);
+      cR.position.set(0.13, 1.05, 0.35);
+      pGroup.add(eyeL, eyeR, cL, cR);
+
+      // 品種特徵
+      if (cfg.spec === 'nose') {
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.38, 10), pMat);
+        nose.rotation.x = Math.PI / 2;
+        nose.position.set(0, 0.98, 0.44);
+        pGroup.add(nose);
+      } else if (cfg.spec === 'ears') {
+        const earL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.36, 8), pMat);
+        earL.rotation.z = Math.PI / 2.3;
+        earL.position.set(-0.35, 1.02, 0);
+        const earR = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.36, 8), pMat);
+        earR.rotation.z = -Math.PI / 2.3;
+        earR.position.set(0.35, 1.02, 0);
+        pGroup.add(earL, earR);
+      } else if (cfg.spec === 'mouth') {
+        const gill = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.028, 8, 16), getClayMat(0xf472b6, 0.4, 0.05));
+        gill.position.set(0, 0.92, 0.3);
+        pGroup.add(gill);
+      }
+
+      // 頭頂翠綠生命嫩莖與葉片/花朵
+      const stemMat = getClayMat(0x16a34a, 0.45, 0.05);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.65, 8), stemMat);
+      stem.position.set(0, 1.45, -0.06);
+      stem.rotation.x = -0.22;
+      pGroup.add(stem);
+
+      const headAcc = new THREE.Group();
+      headAcc.position.set(0, 1.74, -0.15);
+      if (stage === 'flower') {
+        const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), getClayMat(0xfbbf24, 0.3, 0.1));
+        headAcc.add(pistil);
+        const petalMat = getClayMat(0xffffff, 0.35, 0.05);
+        for (let p = 0; p < 5; p++) {
+          const pAng = (p / 5) * Math.PI * 2;
+          const petal = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), petalMat);
+          petal.scale.set(1.4, 0.25, 0.9);
+          petal.position.set(Math.cos(pAng) * 0.14, 0.02, Math.sin(pAng) * 0.14);
+          headAcc.add(petal);
+        }
+      } else {
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), stemMat);
+        leaf.scale.set(1.5, 0.12, 0.85);
+        leaf.rotation.x = 0.38;
+        headAcc.add(leaf);
+      }
+      pGroup.add(headAcc);
+
+      // 肢體
+      const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.32, 6), pMat);
+      leftArm.position.set(-0.2, 0.58, 0);
+      const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.32, 6), pMat);
+      rightArm.position.set(0.2, 0.58, 0);
+      const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.28, 6), pMat);
+      leftLeg.position.set(-0.1, 0.14, 0);
+      const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.28, 6), pMat);
+      rightLeg.position.set(0.1, 0.14, 0);
+      pGroup.add(leftArm, rightArm, leftLeg, rightLeg);
+
+      return { pGroup, stem, headAcc, leftArm, rightArm, leftLeg, rightLeg };
+    }
+
+    // -------------------------------------------------------------------------
+    // 皮克敏探險家隊長導師生成器 (Olimar Explorer Style)
+    // -------------------------------------------------------------------------
+    function createPikminCaptain(suitColor, beaconColor, propType, metaData) {
+      const charGroup = new THREE.Group();
+
+      // 頭部、大圓鼻、靈動大眼、泡泡玻璃面罩
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.68, 20, 20), getClayMat(0xffedd5, 0.42, 0.05));
+      head.position.y = 1.95;
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), getClayMat(0xfb7185, 0.38, 0.05));
+      nose.position.set(0, 1.95, 0.65);
+      const eyeMat = getClayMat(0x0f172a, 0.15, 0.1);
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), eyeMat);
+      eyeL.position.set(-0.24, 2.12, 0.58);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), eyeMat);
+      eyeR.position.set(0.24, 2.12, 0.58);
+
+      const helmetGlass = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 24), getGlassMat(0xf0fdf4, 0.2));
+      helmetGlass.position.y = 2.05;
+      const collarMat = getClayMat(0x94a3b8, 0.22, 0.85);
+      const neckCollar = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.09, 10, 28), collarMat);
+      neckCollar.rotation.x = Math.PI / 2;
+      neckCollar.position.y = 1.25;
+
+      const antennaStem = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.035, 0.72, 8), collarMat);
+      antennaStem.position.set(0, 3.25, 0.1);
+      antennaStem.rotation.x = 0.22;
+      const beaconMat = getClayMat(beaconColor, 0.1, 0.05, beaconColor, 0.95);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), beaconMat);
+      beacon.position.set(0, 3.65, 0.2);
+
+      // 太空服身軀、肩章、維生背包
+      const suitMat = getClayMat(0xf8fafc, 0.35, 0.05);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, 1.15, 18), suitMat);
+      body.position.y = 0.85;
+      const epauletL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), getClayMat(suitColor, 0.3, 0.1));
+      epauletL.position.set(-0.65, 1.15, 0);
+      const epauletR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), getClayMat(suitColor, 0.3, 0.1));
+      epauletR.position.set(0.65, 1.15, 0);
+      const packL = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 12), collarMat);
+      packL.position.set(-0.24, 0.95, -0.68);
+      const packR = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 12), collarMat);
+      packR.position.set(0.24, 0.95, -0.68);
+
+      charGroup.add(head, nose, eyeL, eyeR, helmetGlass, neckCollar, antennaStem, beacon, body, epauletL, epauletR, packL, packR);
+
+      // 手臂與學科道具
+      const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.68, 10), suitMat);
+      leftArm.position.set(-0.75, 0.95, 0);
+      leftArm.rotation.z = 0.42;
+      const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.68, 10), suitMat);
+      rightArm.position.set(0.75, 0.95, 0.2);
+      rightArm.rotation.x = -0.6;
+      charGroup.add(leftArm, rightArm);
+
+      if (propType === 'magnifier') {
+        const magRing = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.065, 12, 28), getClayMat(0xfbbf24, 0.25, 0.85));
+        magRing.position.set(0.95, 1.35, 0.62);
+        const magLens = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 18), getGlassMat(0x38bdf8, 0.3));
+        magLens.rotation.x = Math.PI / 2;
+        magLens.position.set(0.95, 1.35, 0.62);
+        charGroup.add(magRing, magLens);
+      } else if (propType === 'droplet') {
+        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), getGlassMat(0x38bdf8, 0.5));
+        drop.position.set(0.95, 1.35, 0.62);
+        charGroup.add(drop);
+      } else if (propType === 'torch') {
+        const torch = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), getClayMat(0xef4444, 0.2, 0.1, 0xef4444, 0.9));
+        torch.position.set(0.95, 1.35, 0.62);
+        charGroup.add(torch);
+      } else if (propType === 'shield') {
+        const shield = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.08), getClayMat(0x8b5cf6, 0.3, 0.4, 0xa855f7, 0.5));
+        shield.position.set(0.95, 1.35, 0.62);
+        charGroup.add(shield);
+      }
+
+      // 腿部與靴子
+      const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.45, 10), suitMat);
+      leftLeg.position.set(-0.28, 0.24, 0);
+      const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.45, 10), suitMat);
+      rightLeg.position.set(0.28, 0.24, 0);
+      const bootMat = getClayMat(0x0f172a, 0.3, 0.2);
+      const leftBoot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.46), bootMat);
+      leftBoot.position.set(-0.28, 0.08, 0.08);
+      const rightBoot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.46), bootMat);
+      rightBoot.position.set(0.28, 0.08, 0.08);
+      charGroup.add(leftLeg, rightLeg, leftBoot, rightBoot);
+
+      const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), getClayMat(beaconColor, 0.2, 0.1, beaconColor, 0.75));
+      marker.position.y = 4.15;
+      charGroup.add(marker);
+
+      charGroup.traverse(c => {
+        if (c.isMesh) {
+          c.userData = metaData;
+          islandMeshes.push(c);
+        }
+      });
+
+      return { charGroup, leftArm, rightArm, leftLeg, rightLeg, beacon, marker };
+    }
+
+    // -------------------------------------------------------------------------
+    // 第 3 章四大微縮教學島建立 (Pikmin 4 經典微縮庭園美學)
+    // -------------------------------------------------------------------------
+    function buildFourMiniatureIslands() {
+      const units = Object.values(CHAPTER_DATA);
+
+      units.forEach((unit) => {
+        const group = new THREE.Group();
+        group.position.set(unit.islandPos.x, unit.islandPos.y, unit.islandPos.z);
+
+        // 1. 島嶼頂部黏土草坪
+        const topMesh = new THREE.Mesh(GeoCache.cylIslandTop, getClayMat(unit.themeColor, 0.42, 0.06));
+        topMesh.position.y = 1.0;
+        topMesh.castShadow = true;
+        topMesh.receiveShadow = true;
+        topMesh.userData = {
+          unitCode: unit.code,
+          targetTab: 'notes',
+          name: `${unit.code} ${unit.title}`,
+          role: `${unit.badge} 主題島`,
+          desc: '已為您開啟本節「課程重點、實驗剖析與會考評量」！'
+        };
+        group.add(topMesh);
+        islandMeshes.push(topMesh);
+
+        // 2. 地質岩盤底座
+        const rockMesh = new THREE.Mesh(GeoCache.cylIslandRock, getClayMat(0x1e293b, 0.75, 0.05));
+        rockMesh.position.y = -2.8;
+        rockMesh.castShadow = true;
+        rockMesh.userData = topMesh.userData;
+        group.add(rockMesh);
+        islandMeshes.push(rockMesh);
+
+        // 3. 微縮能量光環
+        const glowRing = new THREE.Mesh(GeoCache.torusRing, getClayMat(unit.themeColor, 0.25, 0.2, unit.themeColor, 0.35));
+        glowRing.rotation.x = Math.PI / 2;
+        glowRing.position.y = 1.6;
+        group.add(glowRing);
+
+        // 4. 註冊主圖塊標籤
+        const borderColors = {
+          '3-1': 'border-emerald-400',
+          '3-2': 'border-cyan-400',
+          '3-3': 'border-rose-400',
+          '3-4': 'border-purple-400'
+        };
+        registerIslandHubPin(topMesh, 11.2, unit.code, unit.badge, borderColors[unit.code]);
+
+        // ---------------------------------------------------------------------
+        // 【島嶼 3-1】：植物體內物質的運輸構造 (芹菜紅墨水實驗、年輪樹幹、維管束)
+        // ---------------------------------------------------------------------
+        if (unit.code === '3-1') {
+          // (A) 巨型微縮年輪木雕切片 (Concentric Annual Ring Trunk Slice)
+          const trunkGroup = new THREE.Group();
+          trunkGroup.position.set(-2.8, 2.1, -1.8);
+
+          // 外層深褐色樹皮 (Bark)
+          const bark = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.0, 1.4, 28), getClayMat(0x573a1c, 0.75, 0.05));
+          bark.position.y = 0.7;
+          trunkGroup.add(bark);
+
+          // 內部年輪同心圓層 (木質部早材淡色、晚材深色相間)
+          const woodCore = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 1.42, 28), getClayMat(0xfde68a, 0.55, 0.05));
+          woodCore.position.y = 0.71;
+          trunkGroup.add(woodCore);
+
+          // 同心年輪環線
+          for (let r = 1; r <= 3; r++) {
+            const ringR = new THREE.Mesh(new THREE.TorusGeometry(r * 0.7, 0.04, 6, 28), getClayMat(0x78350f, 0.6, 0.05));
+            ringR.rotation.x = Math.PI / 2;
+            ringR.position.y = 1.43;
+            trunkGroup.add(ringR);
+          }
+
+          const trunkMeta = {
+            unitCode: '3-1',
+            targetTab: 'notes',
+            name: '🪵 雙子葉木本年輪與形成層解剖模型',
+            role: '3-1 核心維管束構造 (點擊看重點筆記)',
+            desc: '年輪完全位於「木質部」！春夏形成的春材色淡質疏，秋冬形成的秋材色深質密，深淺相間為一年！'
+          };
+          trunkGroup.traverse(c => { if (c.isMesh) { c.userData = trunkMeta; islandMeshes.push(c); } });
+          group.add(trunkGroup);
+
+          // (B) 芹菜紅墨水浸泡實驗玻璃燒杯 (Celery in Red Eosin Beaker)
+          const celeryLabGroup = new THREE.Group();
+          celeryLabGroup.position.set(2.6, 2.1, 1.2);
+
+          // 透明玻璃燒杯 + 紅色墨水水位
+          const beaker = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.4, 20), getGlassMat(0xf0fdf4, 0.35));
+          beaker.position.y = 1.2;
+          const redInk = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.12, 1.5, 18), getClayMat(0xef4444, 0.2, 0.1, 0xdc2626, 0.45));
+          redInk.position.y = 0.85;
+          celeryLabGroup.add(beaker, redInk);
+
+          // 2 根插在紅墨水中的鮮綠芹菜莖（葉柄）
+          const celeryStem1 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 4.2, 10), getClayMat(0x86efac, 0.5, 0.05));
+          celeryStem1.position.set(-0.25, 2.6, 0);
+          celeryStem1.rotation.z = -0.15;
+          const celeryStem2 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 4.0, 10), getClayMat(0x4ade80, 0.5, 0.05));
+          celeryStem2.position.set(0.3, 2.5, 0.1);
+          celeryStem2.rotation.z = 0.12;
+
+          // 芹菜葉片（葉脈呈現微紅色）
+          const leafTop = new THREE.Mesh(new THREE.SphereGeometry(0.65, 10, 10), getClayMat(0x22c55e, 0.45, 0.05));
+          leafTop.scale.set(1.4, 0.4, 1.2);
+          leafTop.position.set(0, 4.6, 0);
+          celeryLabGroup.add(celeryStem1, celeryStem2, leafTop);
+
+          const labMeta = {
+            unitCode: '3-1',
+            targetTab: 'lab',
+            name: '🌿 實驗 3-1：芹菜紅墨水水分運輸實驗',
+            role: '會考必考實驗裝置 (點擊進行實驗模擬)',
+            desc: '紅墨水經由「木質部」向上運送！橫切面可見紅色斑點呈環狀排列於內側，證明水分由木質部運送！'
+          };
+          celeryLabGroup.traverse(c => { if (c.isMesh) { c.userData = labMeta; islandMeshes.push(c); } });
+          group.add(celeryLabGroup);
+
+          // (C) 探險隊長「木質小芹」+ 皮克敏搬運細管
+          const charMeta = {
+            unitCode: '3-1',
+            targetTab: 'notes',
+            name: '👩‍🚀 探險隊長「木質小芹」',
+            role: '3-1 駐島名師 (點擊開啟章節重點)',
+            desc: '「記住口訣：木內韌外！向日葵有形成層能加粗，玉米水稻沒有形成層莖細細的喔！」'
+          };
+          const charObj = createPikminCaptain(0x10b981, 0x34d399, 'magnifier', charMeta);
+          group.add(charObj.charGroup);
+          animatedChars.push({ ...charObj, radius: 6.8, speed: 0.72, angle: 0.2, baseY: 2.1 });
+          registerPin(charObj.charGroup, 4.3, '👩‍🚀 隊長小芹', '點我看重點&實驗', 'border-emerald-400', '3-1', charMeta, 'notes');
+
+          // 紅皮克敏協力抬著紅色木質部毛細管
+          const p1 = createMiniPikmin('red', 'flower', 1.0);
+          p1.pGroup.position.set(-1.2, 2.1, 3.2);
+          p1.pGroup.rotation.y = Math.PI / 4;
+          group.add(p1.pGroup);
+
+        // ---------------------------------------------------------------------
+        // 【島嶼 3-2】：植物水分蒸散與養分島 (垂淚蒸散神木、開閉保衛細胞、環狀剝皮)
+        // ---------------------------------------------------------------------
+        } else if (unit.code === '3-2') {
+          // (A) 巨型垂淚蒸散神木 (Transpiration Tree with Rising Droplets)
+          const transTreeGroup = new THREE.Group();
+          transTreeGroup.position.set(-2.5, 2.1, -1.8);
+
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.8, 5.6, 16), getClayMat(0x78350f, 0.75, 0.05));
+          trunk.position.y = 2.8;
+          transTreeGroup.add(trunk);
+
+          const crown = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x06b6d4, 0.42, 0.06));
+          crown.scale.set(4.2, 3.4, 4.2);
+          crown.position.y = 7.2;
+          transTreeGroup.add(crown);
+
+          // 葉冠周圍漂浮的蒸散水珠晶球 (Transpiration Water Bubbles)
+          for (let b = 0; b < 6; b++) {
+            const bAng = (b / 6) * Math.PI * 2;
+            const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.38, 10, 10), getGlassMat(0xbae6fd, 0.45));
+            bubble.position.set(Math.cos(bAng) * 3.2, 7.2 + Math.sin(bAng * 2) * 0.5, Math.sin(bAng) * 3.2);
+            transTreeGroup.add(bubble);
+          }
+
+          const treeMeta = {
+            unitCode: '3-2',
+            targetTab: 'notes',
+            name: '🌳 巨型蒸散神木與水分子上升拉力',
+            role: '3-2 水分長途運輸最大動力',
+            desc: '葉片氣孔的「蒸散作用」產生強大拉力，像吸管吸水一樣將水分從根部一路上拉數十公尺！'
+          };
+          transTreeGroup.traverse(c => { if (c.isMesh) { c.userData = treeMeta; islandMeshes.push(c); } });
+          group.add(transTreeGroup);
+
+          // (B) 兩兩成對的保衛細胞與氣孔門戶 (Breathing Stomata Guard Cells)
+          const stomataGroup = new THREE.Group();
+          stomataGroup.position.set(3.2, 2.1, 1.8);
+
+          const guardMat = getClayMat(0x22d3ee, 0.35, 0.1, 0x0891b2, 0.3);
+          const guardL = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.48, 14, 28, Math.PI), guardMat);
+          guardL.rotation.z = Math.PI / 2;
+          guardL.position.set(-0.25, 2.2, 0);
+          const guardR = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.48, 14, 28, Math.PI), guardMat);
+          guardR.rotation.z = -Math.PI / 2;
+          guardR.position.set(0.25, 2.2, 0);
+          stomataGroup.add(guardL, guardR);
+
+          const stMeta = {
+            unitCode: '3-2',
+            targetTab: 'lab',
+            name: '🌱 氣孔開閉調節與蒸散速率',
+            role: '水分散失與降溫防脫水關鍵門戶',
+            desc: '保衛細胞吸水膨脹時氣孔開啟，水分蒸散；乾旱正午失水萎縮時氣孔關閉，防止脫水枯死！'
+          };
+          stomataGroup.traverse(c => { if (c.isMesh) { c.userData = stMeta; islandMeshes.push(c); } });
+          group.add(stomataGroup);
+          animatedCreatures.push({ type: 'stomata', group: stomataGroup, guardL, guardR, phase: 0 });
+          registerPin(stomataGroup, 3.5, '🌱 氣孔保衛細胞', '點我看實驗', 'border-cyan-400', '3-2', stMeta, 'lab');
+
+          // (C) 蒸散探險家「小露」+ 藍皮克敏頂著水滴
+          const charMeta = {
+            unitCode: '3-2',
+            targetTab: 'notes',
+            name: '👩‍🚀 蒸散探險家「小露」',
+            role: '3-2 駐島導師 (點擊看蒸散與養分)',
+            desc: '「記住環狀剝皮五部曲：切斷韌皮部 → 養分運受阻 → 傷口上方腫脹 → 根部先餓死 → 葉缺水枯死！」'
+          };
+          const charObj = createPikminCaptain(0x06b6d4, 0x38bdf8, 'droplet', charMeta);
+          group.add(charObj.charGroup);
+          animatedChars.push({ ...charObj, radius: 6.8, speed: 0.74, angle: 1.8, baseY: 2.1 });
+          registerPin(charObj.charGroup, 4.3, '👩‍🚀 隊長小露', '點我看重點&影音', 'border-cyan-400', '3-2', charMeta, 'notes');
+
+          // 藍皮克敏頂著晶瑩水滴
+          const pBlue = createMiniPikmin('blue', 'leaf', 1.0);
+          pBlue.pGroup.position.set(-1.0, 2.1, 3.4);
+          group.add(pBlue.pGroup);
+
+        // ---------------------------------------------------------------------
+        // 【島嶼 3-3】：動物體內物質的運輸 (跳動心臟、紅藍雙循環軌道、小魚顯微鏡)
+        // ---------------------------------------------------------------------
+        } else if (unit.code === '3-3') {
+          // (A) 3D 規律搏動人體心臟手辦 (Beating Heart Model)
+          const heartGroup = new THREE.Group();
+          heartGroup.position.set(-2.4, 2.1, -1.5);
+
+          // 左半心臟 (充氧血鮮紅)
+          const leftHeart = new THREE.Mesh(new THREE.SphereGeometry(1.6, 18, 18), getClayMat(0xef4444, 0.35, 0.1, 0xdc2626, 0.35));
+          leftHeart.scale.set(1.0, 1.4, 1.0);
+          leftHeart.position.set(-0.6, 2.8, 0);
+
+          // 右半心臟 (缺氧血深藍)
+          const rightHeart = new THREE.Mesh(new THREE.SphereGeometry(1.5, 18, 18), getClayMat(0x3b82f6, 0.35, 0.1, 0x2563eb, 0.35));
+          rightHeart.scale.set(1.0, 1.35, 1.0);
+          rightHeart.position.set(0.6, 2.8, 0);
+
+          // 上方主動脈弓 (Aorta Arch) 與 肺動脈幹
+          const aorta = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.35, 12, 24, Math.PI), getClayMat(0xef4444, 0.3, 0.1));
+          aorta.position.set(0, 4.6, 0);
+          heartGroup.add(leftHeart, rightHeart, aorta);
+
+          const heartMeta = {
+            unitCode: '3-3',
+            targetTab: 'notes',
+            name: '❤️ 3D 跳動人體心臟與雙循環動脈',
+            role: '3-3 循環系統動力馬達 (點擊看四腔室)',
+            desc: '左心室肌肉最厚，收縮產生強大高壓將充氧血打入主動脈送往全身！瓣膜防止血液逆流。'
+          };
+          heartGroup.traverse(c => { if (c.isMesh) { c.userData = heartMeta; islandMeshes.push(c); } });
+          group.add(heartGroup);
+          animatedCreatures.push({ type: 'heart', group: heartGroup, leftH: leftHeart, rightH: rightHeart, baseY: 2.1 });
+
+          // (B) 小魚尾鰭微血管觀察顯微鏡實驗台 (Microscope & Fish Fin Slide)
+          const microGroup = new THREE.Group();
+          microGroup.position.set(2.8, 2.1, 1.5);
+
+          // 顯微鏡鏡座與鏡臂
+          const scopeBase = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.35, 2.0), getClayMat(0x1e293b, 0.4, 0.5));
+          scopeBase.position.y = 0.18;
+          const scopeArm = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 2.8, 12), getClayMat(0x334155, 0.3, 0.6));
+          scopeArm.position.set(0, 1.5, -0.6);
+          const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.8, 14), getClayMat(0x0f172a, 0.3, 0.7));
+          scopeTube.position.set(0, 2.6, 0.2);
+          scopeTube.rotation.x = 0.25;
+
+          // 載玻片與小魚尾鰭（紅墨水流動線）
+          const slide = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 1.0), getGlassMat(0xffffff, 0.6));
+          slide.position.set(0, 1.1, 0.2);
+          microGroup.add(scopeBase, scopeArm, scopeTube, slide);
+
+          const microMeta = {
+            unitCode: '3-3',
+            targetTab: 'lab',
+            name: '🔬 實驗 3-3：小魚尾鰭血液流動觀察',
+            role: '微血管血流判定黃金實驗 (點擊看實驗剖析)',
+            desc: '顯微鏡為倒立像！由粗分細為動脈；紅血球單行排列通過為微血管；由細匯粗為靜脈！'
+          };
+          microGroup.traverse(c => { if (c.isMesh) { c.userData = microMeta; islandMeshes.push(c); } });
+          group.add(microGroup);
+
+          // (C) 血液巡航隊長「漢克」+ 紅血球皮克敏小隊
+          const charMeta = {
+            unitCode: '3-3',
+            targetTab: 'notes',
+            name: '🧑‍🚀 血液巡航隊長「漢克」',
+            role: '3-3 駐島導師 (點擊看循環路徑)',
+            desc: '「體循環：左心室打全身變缺氧血回右心房；肺循環：右心室打肺部換氣變充氧血回左心房！」'
+          };
+          const charObj = createPikminCaptain(0xef4444, 0xf87171, 'torch', charMeta);
+          group.add(charObj.charGroup);
+          animatedChars.push({ ...charObj, radius: 6.8, speed: 0.76, angle: 3.4, baseY: 2.1 });
+          registerPin(charObj.charGroup, 4.3, '🧑‍🚀 隊長漢克', '點我看重點&實驗', 'border-rose-400', '3-3', charMeta, 'notes');
+
+        // ---------------------------------------------------------------------
+        // 【島嶼 3-4】：人體的防禦作用與淋巴系統 (淋巴結城堡、巨噬細胞吞噬、抗體鎖定)
+        // ---------------------------------------------------------------------
+        } else if (unit.code === '3-4') {
+          // (A) 巨噬細胞吞噬棘刺病毒手辦 (Macrophage Engulfing Pathogen)
+          const macroGroup = new THREE.Group();
+          macroGroup.position.set(-2.5, 2.1, -1.6);
+
+          // 巨噬細胞黏土身軀 (變形蟲不規則偽足)
+          const macroBody = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), getClayMat(0xd8b4fe, 0.45, 0.05));
+          macroBody.scale.set(1.4, 0.9, 1.2);
+          macroBody.position.y = 1.4;
+
+          // 被包圍吞噬的紫紅色棘刺病毒 (Spiked Virus)
+          const virus = new THREE.Mesh(new THREE.SphereGeometry(0.65, 12, 12), getClayMat(0xef4444, 0.3, 0.1, 0xdc2626, 0.5));
+          virus.position.set(1.2, 1.4, 0.4);
+          for (let s = 0; s < 8; s++) {
+            const sAng = (s / 8) * Math.PI * 2;
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 6), getClayMat(0xef4444, 0.3, 0.1));
+            spike.position.set(1.2 + Math.cos(sAng) * 0.75, 1.4 + Math.sin(sAng) * 0.75, 0.4);
+            spike.rotation.z = sAng - Math.PI / 2;
+            macroGroup.add(spike);
+          }
+          macroGroup.add(macroBody, virus);
+
+          const macroMeta = {
+            unitCode: '3-4',
+            targetTab: 'notes',
+            name: '🦠 第二道防線：白血球吞噬病原與發炎反應',
+            role: '非專一性防禦大軍 (點擊看免疫三道防線)',
+            desc: '巨噬細胞伸出偽足將入侵的病毒、細菌包圍吞噬並分解！傷口周圍血管擴張產生紅、腫、熱、痛！'
+          };
+          macroGroup.traverse(c => { if (c.isMesh) { c.userData = macroMeta; islandMeshes.push(c); } });
+          group.add(macroGroup);
+          animatedCreatures.push({ type: 'macrophage', group: macroGroup, virus: virus, baseY: 2.1 });
+
+          // (B) 浮空金黃 Y 型專一性抗體晶體 (Floating Y-shaped Antibodies)
+          const antibodyGroup = new THREE.Group();
+          antibodyGroup.position.set(2.8, 2.1, 1.4);
+
+          // 3 支精準 Y 型抗體
+          const yStem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8), getClayMat(0xfbbf24, 0.25, 0.7, 0xf59e0b, 0.6));
+          yStem.position.y = 1.8;
+          const yArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 8), getClayMat(0xfbbf24, 0.25, 0.7, 0xf59e0b, 0.6));
+          yArmL.position.set(-0.35, 2.5, 0);
+          yArmL.rotation.z = 0.55;
+          const yArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 8), getClayMat(0xfbbf24, 0.25, 0.7, 0xf59e0b, 0.6));
+          yArmR.position.set(0.35, 2.5, 0);
+          yArmR.rotation.z = -0.55;
+          antibodyGroup.add(yStem, yArmL, yArmR);
+
+          const abMeta = {
+            unitCode: '3-4',
+            targetTab: 'lab',
+            name: '🛡️ 第三道防線：B細胞專一性 Y 型抗體',
+            role: '專一性免疫與疫苗記憶核心 (點擊看機制)',
+            desc: 'Y型抗體頂端具備專屬抗原結合位點，如鎖鑰般精準中和特定病毒！疫苗就是引入無害抗原激發抗體記憶！'
+          };
+          antibodyGroup.traverse(c => { if (c.isMesh) { c.userData = abMeta; islandMeshes.push(c); } });
+          group.add(antibodyGroup);
+
+          // (C) 免疫衛士隊長「白盾」+ 白皮克敏（紅寶石眼耐毒守衛）
+          const charMeta = {
+            unitCode: '3-4',
+            targetTab: 'notes',
+            name: '🧑‍🚀 免疫衛士隊長「白盾」',
+            role: '3-4 駐島導師 (點擊看淋巴系統)',
+            desc: '「體液三部曲：血漿滲出變組織液，滲入淋巴管變淋巴，最後匯入靜脈重回血液！打疫苗能建立記憶細胞喔！」'
+          };
+          const charObj = createPikminCaptain(0x8b5cf6, 0xa855f7, 'shield', charMeta);
+          group.add(charObj.charGroup);
+          animatedChars.push({ ...charObj, radius: 6.8, speed: 0.75, angle: 5.0, baseY: 2.1 });
+          registerPin(charObj.charGroup, 4.3, '🧑‍🚀 衛士白盾', '點我看重點&評量', 'border-purple-400', '3-4', charMeta, 'notes');
+
+          // 白色皮克敏（紅寶石毒眼）
+          const pWhite = createMiniPikmin('white', 'bud', 0.95);
+          pWhite.pGroup.position.set(0.8, 2.1, 3.2);
+          group.add(pWhite.pGroup);
+        }
+
+        scene.add(group);
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 宇宙深空漂浮微粒
+    // -------------------------------------------------------------------------
+    function buildFloatingParticles() {
+      const geo = new THREE.BufferGeometry();
+      const count = 260;
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        pos[i * 3] = (Math.random() - 0.5) * 115;
+        pos[i * 3 + 1] = Math.random() * 28 - 4;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 115;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({ color: 0x6ee7b7, size: 0.55, transparent: true, opacity: 0.65 });
+      floatingParticles = new THREE.Points(geo, mat);
+      scene.add(floatingParticles);
+    }
+
+    // -------------------------------------------------------------------------
+    // 動畫主迴圈 (Zero-GC High-FPS Animation Loop)
+    // -------------------------------------------------------------------------
+    function animate() {
+      requestAnimationFrame(animate);
+      if (document.hidden) return;
+
+      const elapsed = clock.getElapsedTime();
+
+      // 1. 太陽系行星公轉與自轉
+      for (let i = 0; i < planets.length; i++) {
+        const p = planets[i];
+        const curAngle = p.angle + elapsed * p.speed * 0.35;
+        p.pivot.position.x = Math.cos(curAngle) * p.dist;
+        p.pivot.position.z = Math.sin(curAngle) * p.dist;
+        p.pivot.position.y = p.yOffset + Math.sin(elapsed + p.angle) * 1.1;
+        p.mesh.rotation.y += 0.008;
+      }
+
+      // 2. 中央核心陀螺儀旋轉
+      if (centralCoreGroup) {
+        centralCoreGroup.rotation.y = elapsed * 0.25;
+      }
+
+      // 3. 皮克敏隊長行走擺動與呼吸信號燈
+      for (let i = 0; i < animatedChars.length; i++) {
+        const ch = animatedChars[i];
+        const a = ch.angle + elapsed * ch.speed * 0.45;
+        const nx = Math.cos(a) * ch.radius;
+        const nz = Math.sin(a) * ch.radius;
+        ch.charGroup.position.set(nx, ch.baseY + Math.abs(Math.sin(elapsed * 5.5 + i)) * 0.22, nz);
+        ch.charGroup.rotation.y = -a + Math.PI;
+        ch.leftLeg.rotation.x = Math.sin(elapsed * 6 + i) * 0.45;
+        ch.rightLeg.rotation.x = -Math.sin(elapsed * 6 + i) * 0.45;
+        ch.leftArm.rotation.x = -Math.sin(elapsed * 6 + i) * 0.35;
+        ch.marker.position.y = 4.15 + Math.sin(elapsed * 4 + i) * 0.18;
+        if (ch.beacon) {
+          ch.beacon.scale.setScalar(0.9 + Math.sin(elapsed * 6 + i) * 0.15);
+        }
+      }
+
+      // 4. 代表性生物與地標動態 (心跳舒縮、氣孔開合、吞噬蠕動)
+      for (let i = 0; i < animatedCreatures.length; i++) {
+        const cr = animatedCreatures[i];
+        if (cr.type === 'heart') {
+          // 心臟規律心搏舒縮動畫 (Lubb-Dupp)
+          const beat = Math.sin(elapsed * 6.5);
+          const pulse = (beat > 0.4) ? 1.0 + beat * 0.12 : 1.0;
+          cr.group.scale.set(pulse, pulse, pulse);
+        } else if (cr.type === 'stomata') {
+          // 氣孔保衛細胞平穩擴張開合呼吸
+          const openOffset = 0.28 + (Math.sin(elapsed * 2.2) + 1) * 0.22;
+          cr.guardL.position.x = -openOffset;
+          cr.guardR.position.x = openOffset;
+        } else if (cr.type === 'macrophage') {
+          // 巨噬細胞吞噬蠕動與病毒晃動
+          cr.group.position.y = cr.baseY + Math.sin(elapsed * 2.5) * 0.15;
+          if (cr.virus) {
+            cr.virus.rotation.y = elapsed * 1.5;
+            cr.virus.position.x = 1.2 + Math.sin(elapsed * 3.0) * 0.12;
+          }
+        }
+      }
+
+      // 5. 漂浮粒子微轉
+      if (floatingParticles) {
+        floatingParticles.rotation.y = elapsed * 0.02;
+      }
+
+      // 6. 攝影機平滑飛躍插值 (Smooth Camera Lerp)
+      if (targetCamPos && targetLookAt) {
+        camera.position.lerp(targetCamPos, 0.068);
+        controls.target.lerp(targetLookAt, 0.068);
+        if (camera.position.distanceTo(targetCamPos) < 0.35) {
+          targetCamPos = null;
+          targetLookAt = null;
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+
+      // 7. 更新 3D 浮空標籤螢幕投影
+      updateBillboardPins();
+    }
+
+    // -------------------------------------------------------------------------
+    // 視窗縮放與滑鼠點擊偵測 (Raycasting & Event Listeners)
+    // -------------------------------------------------------------------------
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onPointerMove(event) {
+      _rayMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      _rayMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      _raycaster.setFromCamera(_rayMouse, camera);
+      const intersects = _raycaster.intersectObjects(islandMeshes);
+      document.body.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
+    }
+
+    let pointerDownTime = 0;
+    function onPointerDown() {
+      pointerDownTime = performance.now();
+    }
+
+    function onPointerUp(event) {
+      if (performance.now() - pointerDownTime > 260) return; // 拖曳旋轉非點擊
+
+      _rayMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      _rayMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      _raycaster.setFromCamera(_rayMouse, camera);
+      const intersects = _raycaster.intersectObjects(islandMeshes);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        if (hit.userData && hit.userData.unitCode) {
+          triggerEntityClick(hit.userData, hit.userData.targetTab || 'notes');
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 導航、抽屜與導師對話卡交互邏輯
+    // -------------------------------------------------------------------------
+    function triggerEntityClick(meta, targetTab = 'notes') {
+      showMentorCard(meta);
+      if (meta.unitCode && meta.unitCode !== 'home') {
+        currentUnitCode = meta.unitCode;
+        zoomToIsland(meta.unitCode);
+        openDrawerWithTab(meta.unitCode, targetTab);
+      }
+    }
+
+    function showMentorCard(meta) {
+      const card = document.getElementById('mentor-card');
+      document.getElementById('mentor-name').innerText = meta.name || '探險導師';
+      document.getElementById('mentor-role').innerText = meta.role || '名師解說';
+      document.getElementById('mentor-speech').innerText = meta.desc || meta.speech || '歡迎探索第3章微縮群島！';
+      card.classList.remove('translate-y-32', 'opacity-0', 'pointer-events-none');
+      if (isAudioEnabled && window.speechSynthesis) {
+        speakText(meta.desc || meta.speech || meta.name);
+      }
+    }
+
+    function closeMentorCard() {
+      const card = document.getElementById('mentor-card');
+      card.classList.add('translate-y-32', 'opacity-0', 'pointer-events-none');
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    }
+
+    function speakCurrentMentor() {
+      const text = document.getElementById('mentor-speech').innerText;
+      speakText(text);
+    }
+
+    function speakText(text) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-TW';
+      u.rate = 1.05;
+      u.pitch = 1.1;
+      window.speechSynthesis.speak(u);
+    }
+
+    function toggleAudio() {
+      isAudioEnabled = !isAudioEnabled;
+      document.getElementById('btn-audio').classList.toggle('text-rose-400', isAudioEnabled);
+      document.getElementById('btn-audio').classList.toggle('text-slate-500', !isAudioEnabled);
+      if (!isAudioEnabled && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 鏡頭巡航飛躍 (Camera Fly-to Interpolation)
+    // -------------------------------------------------------------------------
+    function zoomToIsland(islandId) {
+      currentIslandId = islandId;
+
+      // 更新頂部按鈕狀態
+      document.querySelectorAll('nav button').forEach(btn => {
+        btn.classList.remove('text-emerald-400', 'font-bold');
+        btn.classList.add('text-slate-300');
+      });
+      const activeBtn = document.getElementById(`nav-btn-${islandId}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-300');
+        activeBtn.classList.add('text-emerald-400', 'font-bold');
+      }
+
+      if (islandId === 'home') {
+        targetCamPos = new THREE.Vector3(0, 58, 88);
+        targetLookAt = new THREE.Vector3(0, 4, 0);
+        closeDrawer();
+        return;
+      }
+
+      const unit = CHAPTER_DATA[islandId];
+      if (unit) {
+        currentUnitCode = islandId;
+        const p = unit.islandPos;
+        targetCamPos = new THREE.Vector3(p.x, p.y + 18, p.z + 28);
+        targetLookAt = new THREE.Vector3(p.x, p.y + 2.5, p.z);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 抽屜控制與 Tab 切換渲染
+    // -------------------------------------------------------------------------
+    function openDrawerWithTab(unitCode, tabName) {
+      currentUnitCode = unitCode;
+      currentActiveTab = tabName;
+      const unit = CHAPTER_DATA[unitCode];
+      if (!unit) return;
+
+      document.getElementById('drawer-badge-icon').innerText = unit.code;
+      document.getElementById('drawer-unit-badge').innerText = unit.badge;
+      document.getElementById('drawer-unit-title').innerText = unit.title;
+
+      renderTabContent();
+      document.getElementById('drawer').classList.remove('translate-x-full');
+    }
+
+    function directOpenDrawer(unitCode, tabName, event) {
+      if (event) event.stopPropagation();
+      zoomToIsland(unitCode);
+      openDrawerWithTab(unitCode, tabName);
+    }
+
+    function openCurrentDrawerTab() {
+      if (currentUnitCode && currentUnitCode !== 'home') {
+        openDrawerWithTab(currentUnitCode, 'notes');
+      }
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer').classList.add('translate-x-full');
+    }
+
+    function switchTab(tabName) {
+      currentActiveTab = tabName;
+      renderTabContent();
+    }
+
+    function renderTabContent() {
+      const unit = CHAPTER_DATA[currentUnitCode];
+      if (!unit) return;
+
+      // 更新按鈕高亮
+      ['notes', 'lab', 'quiz', 'video', 'stella'].forEach(tab => {
+        const btn = document.getElementById(`tab-btn-${tab}`);
+        if (btn) {
+          if (tab === currentActiveTab) {
+            btn.className = 'px-3 sm:px-4 py-3 border-b-2 border-emerald-400 text-emerald-400 font-bold flex items-center gap-1.5 transition-all';
+          } else {
+            btn.className = 'px-3 sm:px-4 py-3 border-b-2 border-transparent text-slate-300 hover:text-white flex items-center gap-1.5 transition-all';
+          }
+        }
+      });
+
+      const body = document.getElementById('drawer-body');
+
+      if (currentActiveTab === 'notes') {
+        body.innerHTML = unit.notes;
+      } else if (currentActiveTab === 'lab') {
+        body.innerHTML = unit.lab;
+      } else if (currentActiveTab === 'quiz') {
+        renderQuizTab(unit, body);
+      } else if (currentActiveTab === 'video') {
+        renderVideoTab(unit, body);
+      } else if (currentActiveTab === 'stella') {
+        renderStellaTab(unit, body);
+      }
+    }
+
+    // 評量測驗頁籤渲染
+    function renderQuizTab(unit, container) {
+      let html = `
+        <div class="space-y-4">
+          <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10 flex items-center justify-between">
+            <div>
+              <h4 class="font-bold text-white text-sm">🎓 ${unit.code} 會考必考通關題庫</h4>
+              <p class="text-xs text-slate-400 mt-0.5">即時解答、名師破題剖析與紅綠診斷</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">共 6 題</span>
+          </div>
+      `;
+
+      unit.quizzes.forEach((item, idx) => {
+        html += `
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-3" id="quiz-card-${idx}">
+            <div class="flex items-start gap-2">
+              <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">${idx + 1}</span>
+              <p class="font-bold text-sm text-slate-100">${item.q}</p>
+            </div>
+            <div class="space-y-1.5 pl-8">
+        `;
+        item.a.forEach((opt, optIdx) => {
+          const letter = String.fromCharCode(65 + optIdx);
+          html += `
+            <button onclick="checkQuizAnswer(${idx}, ${optIdx}, ${item.c}, '${item.exp.replace(/'/g, "\\'")}')" 
+                    id="quiz-opt-${idx}-${optIdx}" 
+                    class="w-full text-left px-3 py-2 rounded-xl bg-slate-800/60 hover:bg-white/10 text-xs sm:text-sm text-slate-200 transition-all border border-transparent flex items-center gap-2">
+              <span class="w-5 h-5 rounded-md bg-slate-700/80 flex items-center justify-center text-xs font-bold">${letter}</span>
+              <span>${opt}</span>
+            </button>
+          `;
+        });
+        html += `
+            </div>
+            <div id="quiz-exp-${idx}" class="hidden mt-2 p-3 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-xs text-slate-300 leading-relaxed">
+              <b class="text-emerald-400">🔍 名師破題大招：</b> <span id="quiz-exp-text-${idx}"></span>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+      container.innerHTML = html;
+    }
+
+    function checkQuizAnswer(qIdx, selectedOpt, correctOpt, expText) {
+      const expDiv = document.getElementById(`quiz-exp-${qIdx}`);
+      const expSpan = document.getElementById(`quiz-exp-text-${qIdx}`);
+      expSpan.innerText = expText;
+      expDiv.classList.remove('hidden');
+
+      for (let o = 0; o < 4; o++) {
+        const btn = document.getElementById(`quiz-opt-${qIdx}-${o}`);
+        if (!btn) continue;
+        btn.disabled = true;
+        if (o === correctOpt) {
+          btn.className = 'w-full text-left px-3 py-2 rounded-xl bg-emerald-950/80 border border-emerald-500 text-xs sm:text-sm text-emerald-200 font-bold flex items-center gap-2';
+        } else if (o === selectedOpt) {
+          btn.className = 'w-full text-left px-3 py-2 rounded-xl bg-rose-950/80 border border-rose-500 text-xs sm:text-sm text-rose-200 font-bold flex items-center gap-2';
+        }
+      }
+
+      if (selectedOpt === correctOpt) {
+        if (window.confetti) {
+          confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 } });
+        }
+      }
+    }
+
+    // 教學影音頁籤渲染
+    function renderVideoTab(unit, container) {
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10">
+            <h4 class="font-bold text-white text-sm">🎬 ${unit.code} 名師影音精選專區</h4>
+            <p class="text-xs text-slate-400 mt-0.5">動畫圖解與實驗真實操作影片</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-3">
+            <h5 class="font-bold text-sm text-emerald-300">📹 ${unit.code} 核心概念 3D 動畫教學</h5>
+            <div class="aspect-video w-full rounded-xl bg-slate-950 border border-white/10 flex items-center justify-center text-slate-400">
+              <div class="text-center p-4">
+                <i class="fa-solid fa-play-circle text-4xl text-emerald-400 mb-2"></i>
+                <p class="text-xs">【${unit.code} 動態教學影音】已同步掛載於雲端伺服器！</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // STELLA 探究頁籤渲染
+    function renderStellaTab(unit, container) {
+      container.innerHTML = `
+        <div class="space-y-4">
+          <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/30">
+            <h4 class="font-bold text-emerald-300 text-sm mb-1">🚀 STELLA 跨學科自主探究專案</h4>
+            <p class="text-xs text-slate-300">融合科學 (S)、科技 (T)、工程 (E)、藝術美感 (A) 與語文表達 (LA)。</p>
+          </div>
+          <div class="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-3 text-xs leading-relaxed text-slate-200">
+            <div>
+              <b class="text-emerald-400">🔬 Science 科學探究：</b>
+              <p class="mt-0.5 text-slate-300">以 Micro:bit 水分感測器定量測定芹菜在不同照光條件下的水面下降毫升數，繪製蒸散速率曲線。</p>
+            </div>
+            <div>
+              <b class="text-cyan-400">💻 Technology 數位科技：</b>
+              <p class="mt-0.5 text-slate-300">使用手機慢動作錄影拍攝小魚尾鰭紅血球流動，透過 Tracker 軟體計算紅血球移動之微米秒速。</p>
+            </div>
+            <div>
+              <b class="text-amber-400">🎨 Arts 藝術美感：</b>
+              <p class="mt-0.5 text-slate-300">以 Apple 極簡資訊圖表繪製「體循環與肺循環雙軌地鐵路線圖」，呈現充氧血與缺氧血的壯麗旅程。</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // -------------------------------------------------------------------------
+    // Pan & Zoom 燈箱控制邏輯
+    // -------------------------------------------------------------------------
+    let currentLightboxZoom = 1.0;
+    function openLightbox(imgSrc, title = '圖解觀察') {
+      const modal = document.getElementById('lightbox-modal');
+      const img = document.getElementById('lightbox-img');
+      img.src = imgSrc;
+      document.getElementById('lightbox-title').innerText = title;
+      currentLightboxZoom = 1.0;
+      updateLightboxZoomTransform();
+      modal.classList.remove('hidden');
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox-modal').classList.add('hidden');
+    }
+
+    function zoomLightbox(delta) {
+      currentLightboxZoom = Math.max(0.75, Math.min(3.5, currentLightboxZoom + delta));
+      updateLightboxZoomTransform();
+    }
+
+    function resetLightboxZoom() {
+      currentLightboxZoom = 1.0;
+      updateLightboxZoomTransform();
+    }
+
+    function updateLightboxZoomTransform() {
+      const img = document.getElementById('lightbox-img');
+      img.style.transform = `scale(${currentLightboxZoom})`;
+      document.getElementById('lightbox-zoom-level').innerText = `${Math.round(currentLightboxZoom * 100)}%`;
+    }
+
+    function toggleHelpModal() {
+      document.getElementById('help-modal').classList.toggle('hidden');
+    }
+
+    // 頁面啟動載入
+    window.addEventListener('DOMContentLoaded', () => {
+      initWebGL();
+    });
+  </script>
+</body>
+</html>
